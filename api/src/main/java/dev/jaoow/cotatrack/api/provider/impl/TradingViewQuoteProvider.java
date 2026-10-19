@@ -14,7 +14,6 @@ import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
 import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,8 +39,7 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
             "average_volume_30d_calc", "average_volume_10d_calc", "average_volume_90d_calc",
             "price_52_week_high", "price_52_week_low", "SMA200", "logoid",
             "dividends_yield", "dividends_yield_current", "dps_common_stock_prim_issue_fy",
-            "dividend_amount_recent", "time"
-    );
+            "dividend_amount_recent", "time");
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -50,8 +48,7 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
     public TradingViewQuoteProvider() {
         this(
                 HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build(),
-                Boolean.parseBoolean(System.getProperty("cotatrack.providers.tradingview.enabled", "true"))
-        );
+                Boolean.parseBoolean(System.getProperty("cotatrack.providers.tradingview.enabled", "true")));
     }
 
     public TradingViewQuoteProvider(HttpClient httpClient, boolean enabled) {
@@ -118,7 +115,8 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
         int statusCode = response.statusCode();
 
         if (statusCode != 200) {
-            throw new ProviderException(getName(), statusCode, "Failed response from TradingView scanner: " + response.body());
+            throw new ProviderException(getName(), statusCode,
+                    "Failed response from TradingView scanner: " + response.body());
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -132,7 +130,8 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
         for (JsonNode rowNode : dataArray) {
             String tickerKey = rowNode.get("s").asText();
             ArrayNode dArray = (ArrayNode) rowNode.get("d");
-            if (dArray == null) continue;
+            if (dArray == null)
+                continue;
 
             Map<String, JsonNode> colMap = new HashMap<>();
             for (int i = 0; i < COLUMNS.size() && i < dArray.size(); i++) {
@@ -153,7 +152,8 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
     }
 
     @Override
-    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval, Range range) {
+    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval,
+            Range range) {
         // TradingView Scanner API does not provide historical candle series
         return Collections.emptyList();
     }
@@ -226,7 +226,8 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
     }
 
     private String normalizeSymbol(String symbol) {
-        if (symbol == null) return "";
+        if (symbol == null)
+            return "";
         String s = symbol.trim().toUpperCase();
         if (s.startsWith("BMFBOVESPA:")) {
             s = s.substring("BMFBOVESPA:".length());
@@ -244,8 +245,10 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
 
     private Double getDouble(Map<String, JsonNode> cols, String key) {
         JsonNode node = cols.get(key);
-        if (node == null || node.isNull()) return null;
-        if (node.isNumber()) return node.asDouble();
+        if (node == null || node.isNull())
+            return null;
+        if (node.isNumber())
+            return node.asDouble();
         try {
             return Double.parseDouble(node.asText());
         } catch (NumberFormatException ignored) {
@@ -255,8 +258,10 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
 
     private Long getLong(Map<String, JsonNode> cols, String key) {
         JsonNode node = cols.get(key);
-        if (node == null || node.isNull()) return null;
-        if (node.isNumber()) return node.asLong();
+        if (node == null || node.isNull())
+            return null;
+        if (node.isNumber())
+            return node.asLong();
         try {
             return Long.parseLong(node.asText());
         } catch (NumberFormatException ignored) {

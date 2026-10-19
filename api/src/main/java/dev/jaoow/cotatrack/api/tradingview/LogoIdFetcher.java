@@ -1,7 +1,6 @@
 package dev.jaoow.cotatrack.api.tradingview;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
+import dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager;
 import dev.jaoow.cotatrack.api.tradingview.field.FieldFetcher;
 import dev.jaoow.cotatrack.api.tradingview.field.StockField;
 import lombok.extern.slf4j.Slf4j;
@@ -17,11 +16,12 @@ public class LogoIdFetcher {
      * @return the logo id
      */
     public static String fetchLogoId(String exchangeKey, String symbol) {
-        if (exchangeKey == null || symbol == null) return null;
+        if (exchangeKey == null || symbol == null)
+            return null;
         String cleanSymbol = symbol.trim().toUpperCase().replace(".SA", "");
         String cacheKey = exchangeKey.trim().toUpperCase() + ":" + cleanSymbol;
         try {
-            return dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager.getInstance()
+            return CotaTrackCacheManager.getInstance()
                     .getLogoCache()
                     .get(cacheKey, LogoIdFetcher::fetchLogoIdFromAPI);
         } catch (Exception e) {

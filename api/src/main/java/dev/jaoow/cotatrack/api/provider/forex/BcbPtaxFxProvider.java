@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jaoow.cotatrack.api.provider.ProviderException;
+import dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker;
 import dev.jaoow.cotatrack.api.requests.quotes.model.FxQuote;
 import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.extern.slf4j.Slf4j;
@@ -113,15 +114,15 @@ public class BcbPtaxFxProvider implements FxQuoteProvider {
     private FxQuote queryBcbForCurrency(String requestedSymbol, BcbCurrencyMapper.CurrencyInfo info) {
         try {
             FxQuote quote = queryOlinda(requestedSymbol, info);
-            dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+            ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
             return quote;
         } catch (Exception e) {
-            dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, e);
+            ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, e);
             log.warn("BCB Olinda failed for currency {}: {}. Attempting fallback...", info.code(), e.getMessage());
             if ("USD".equalsIgnoreCase(info.code())) {
                 FxQuote sgs = querySgsUsd(requestedSymbol, info);
                 if (sgs != null) {
-                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+                    ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
                     return sgs;
                 }
             }

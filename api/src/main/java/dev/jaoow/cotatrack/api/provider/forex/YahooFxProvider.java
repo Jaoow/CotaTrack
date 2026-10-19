@@ -3,7 +3,8 @@ package dev.jaoow.cotatrack.api.provider.forex;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.jaoow.cotatrack.api.provider.ProviderException;
+
+import dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker;
 import dev.jaoow.cotatrack.api.requests.quotes.FxQuoteRequest;
 import dev.jaoow.cotatrack.api.requests.quotes.model.FxQuote;
 import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
@@ -33,8 +34,7 @@ public class YahooFxProvider implements FxQuoteProvider {
     public YahooFxProvider() {
         this(
                 HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build(),
-                Boolean.parseBoolean(System.getProperty("cotatrack.providers.yahoo-fx.enabled", "true"))
-        );
+                Boolean.parseBoolean(System.getProperty("cotatrack.providers.yahoo-fx.enabled", "true")));
     }
 
     public YahooFxProvider(HttpClient httpClient, boolean enabled) {
@@ -75,7 +75,8 @@ public class YahooFxProvider implements FxQuoteProvider {
             try {
                 FxQuote quote = queryYahooChart(rawSym, ticker, name);
                 if (quote != null) {
-                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+                    ProviderHealthTracker.getInstance()
+                            .recordSuccess(PROVIDER_NAME);
                     results.put(rawSym, quote);
                 } else {
                     // Try legacy FxQuoteRequest
@@ -86,14 +87,17 @@ public class YahooFxProvider implements FxQuoteProvider {
                         legacyQuote.setName(name);
                         legacyQuote.setCurrency("BRL");
                         legacyQuote.setProvider(PROVIDER_NAME + " (fallback)");
-                        dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+                        ProviderHealthTracker.getInstance()
+                                .recordSuccess(PROVIDER_NAME);
                         results.put(rawSym, legacyQuote);
                     } else {
-                        dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, "Empty response for " + ticker);
+                        ProviderHealthTracker.getInstance()
+                                .recordFailure(PROVIDER_NAME, "Empty response for " + ticker);
                     }
                 }
             } catch (Exception e) {
-                dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, e);
+                ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME,
+                        e);
                 log.warn("Yahoo FX provider failed for symbol {}: {}", rawSym, e.getMessage());
             }
         }

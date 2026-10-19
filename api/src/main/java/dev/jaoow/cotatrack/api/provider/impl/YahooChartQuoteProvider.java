@@ -15,7 +15,6 @@ import dev.jaoow.cotatrack.api.yahoo.SymbolMapper;
 import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -36,7 +35,8 @@ import java.util.stream.IntStream;
 
 /**
  * Fallback market data provider using Yahoo Finance v8 Chart endpoint.
- * Does not require cookies or crumbs; provides intraday price, metadata, and historical candles.
+ * Does not require cookies or crumbs; provides intraday price, metadata, and
+ * historical candles.
  */
 @Slf4j
 public class YahooChartQuoteProvider implements StockQuoteProvider {
@@ -52,8 +52,7 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
     public YahooChartQuoteProvider() {
         this(
                 HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build(),
-                Boolean.parseBoolean(System.getProperty("cotatrack.providers.yahoochart.enabled", "true"))
-        );
+                Boolean.parseBoolean(System.getProperty("cotatrack.providers.yahoochart.enabled", "true")));
     }
 
     public YahooChartQuoteProvider(HttpClient httpClient, boolean enabled) {
@@ -80,7 +79,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
     @Override
     public Optional<Quote> fetchQuote(String symbol) throws Exception {
         String mappedSymbol = SymbolMapper.mapSymbol(symbol);
-        String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL + URLEncoder.encode(mappedSymbol, StandardCharsets.UTF_8)
+        String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL
+                + URLEncoder.encode(mappedSymbol, StandardCharsets.UTF_8)
                 + "?interval=1d&range=1y&events=div";
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -95,7 +95,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
             return Optional.empty();
         }
         if (response.statusCode() != 200) {
-            throw new ProviderException(getName(), response.statusCode(), "Yahoo chart returned error: " + response.body());
+            throw new ProviderException(getName(), response.statusCode(),
+                    "Yahoo chart returned error: " + response.body());
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -140,7 +141,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
     }
 
     @Override
-    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval, Range range) throws Exception {
+    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval,
+            Range range) throws Exception {
         String mappedSymbol = SymbolMapper.mapSymbol(symbol);
 
         Map<String, String> params = new LinkedHashMap<>();
@@ -159,7 +161,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
             params.put("range", range.getTag());
         }
 
-        String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL + URLEncoder.encode(mappedSymbol, StandardCharsets.UTF_8)
+        String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL
+                + URLEncoder.encode(mappedSymbol, StandardCharsets.UTF_8)
                 + "?" + Utils.buildUrlParameters(params);
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -171,7 +174,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new ProviderException(getName(), response.statusCode(), "Yahoo chart historical failed: " + response.body());
+            throw new ProviderException(getName(), response.statusCode(),
+                    "Yahoo chart historical failed: " + response.body());
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -217,19 +221,26 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
         q.setLongName(meta.path("longName").asText(q.getShortName()));
 
         Double price = meta.has("regularMarketPrice") && !meta.get("regularMarketPrice").isNull()
-                ? meta.get("regularMarketPrice").asDouble() : null;
+                ? meta.get("regularMarketPrice").asDouble()
+                : null;
         Double changePct = meta.has("regularMarketChangePercent") && !meta.get("regularMarketChangePercent").isNull()
-                ? meta.get("regularMarketChangePercent").asDouble() : null;
+                ? meta.get("regularMarketChangePercent").asDouble()
+                : null;
         Double change = meta.has("fulldayChange") && !meta.get("fulldayChange").isNull()
-                ? meta.get("fulldayChange").asDouble() : null;
+                ? meta.get("fulldayChange").asDouble()
+                : null;
         Double prevClose = meta.has("chartPreviousClose") && !meta.get("chartPreviousClose").isNull()
-                ? meta.get("chartPreviousClose").asDouble() : null;
+                ? meta.get("chartPreviousClose").asDouble()
+                : null;
         Double high = meta.has("regularMarketDayHigh") && !meta.get("regularMarketDayHigh").isNull()
-                ? meta.get("regularMarketDayHigh").asDouble() : price;
+                ? meta.get("regularMarketDayHigh").asDouble()
+                : price;
         Double low = meta.has("regularMarketDayLow") && !meta.get("regularMarketDayLow").isNull()
-                ? meta.get("regularMarketDayLow").asDouble() : price;
+                ? meta.get("regularMarketDayLow").asDouble()
+                : price;
         Long volume = meta.has("regularMarketVolume") && !meta.get("regularMarketVolume").isNull()
-                ? meta.get("regularMarketVolume").asLong() : null;
+                ? meta.get("regularMarketVolume").asLong()
+                : null;
 
         q.setRegularMarketPrice(price);
         q.setRegularMarketChange(change);
@@ -243,9 +254,11 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
         q.setRegularMarketTime(new Date(timeSeconds * 1000));
 
         Double high52 = meta.has("fiftyTwoWeekHigh") && !meta.get("fiftyTwoWeekHigh").isNull()
-                ? meta.get("fiftyTwoWeekHigh").asDouble() : null;
+                ? meta.get("fiftyTwoWeekHigh").asDouble()
+                : null;
         Double low52 = meta.has("fiftyTwoWeekLow") && !meta.get("fiftyTwoWeekLow").isNull()
-                ? meta.get("fiftyTwoWeekLow").asDouble() : null;
+                ? meta.get("fiftyTwoWeekLow").asDouble()
+                : null;
         q.setFiftyTwoWeekHigh(high52);
         q.setFiftyTwoWeekLow(low52);
 
@@ -261,7 +274,8 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
             }
         }
 
-        // Parse historical candles if present to derive SMA200, 10d/3m volumes, and 52w extremes
+        // Parse historical candles if present to derive SMA200, 10d/3m volumes, and 52w
+        // extremes
         JsonNode timestamps = resultNode.path("timestamp");
         JsonNode indicators = resultNode.path("indicators");
         if (timestamps.isArray() && indicators.isObject()) {
@@ -301,23 +315,30 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
             JsonNode quoteNode = indicators.path("quote").get(0);
             JsonNode adjNode = indicators.path("adjclose").get(0);
 
-            BigDecimal adjClose = (adjNode != null && adjNode.has("adjclose") && adjNode.path("adjclose").size() > index)
-                    ? adjNode.path("adjclose").get(index).decimalValue() : BigDecimal.ZERO;
+            BigDecimal adjClose = (adjNode != null && adjNode.has("adjclose")
+                    && adjNode.path("adjclose").size() > index)
+                            ? adjNode.path("adjclose").get(index).decimalValue()
+                            : BigDecimal.ZERO;
 
             long volume = (quoteNode != null && quoteNode.has("volume") && quoteNode.path("volume").size() > index)
-                    ? quoteNode.path("volume").get(index).asLong(0L) : 0L;
+                    ? quoteNode.path("volume").get(index).asLong(0L)
+                    : 0L;
 
             BigDecimal open = (quoteNode != null && quoteNode.has("open") && quoteNode.path("open").size() > index)
-                    ? quoteNode.path("open").get(index).decimalValue() : BigDecimal.ZERO;
+                    ? quoteNode.path("open").get(index).decimalValue()
+                    : BigDecimal.ZERO;
 
             BigDecimal high = (quoteNode != null && quoteNode.has("high") && quoteNode.path("high").size() > index)
-                    ? quoteNode.path("high").get(index).decimalValue() : BigDecimal.ZERO;
+                    ? quoteNode.path("high").get(index).decimalValue()
+                    : BigDecimal.ZERO;
 
             BigDecimal low = (quoteNode != null && quoteNode.has("low") && quoteNode.path("low").size() > index)
-                    ? quoteNode.path("low").get(index).decimalValue() : BigDecimal.ZERO;
+                    ? quoteNode.path("low").get(index).decimalValue()
+                    : BigDecimal.ZERO;
 
             BigDecimal close = (quoteNode != null && quoteNode.has("close") && quoteNode.path("close").size() > index)
-                    ? quoteNode.path("close").get(index).decimalValue() : BigDecimal.ZERO;
+                    ? quoteNode.path("close").get(index).decimalValue()
+                    : BigDecimal.ZERO;
 
             return new HistoricalQuote(timestamp, open, low, high, close, adjClose, volume);
         } catch (Exception e) {

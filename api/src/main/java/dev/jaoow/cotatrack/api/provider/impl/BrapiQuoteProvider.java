@@ -13,7 +13,6 @@ import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
 import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -32,7 +31,8 @@ import java.util.concurrent.TimeUnit;
  * Follows free tier constraints:
  * - 1 ticker per request
  * - Max 1 concurrent request (guaranteed via Semaphore)
- * - Token supplied via env BRAPI_TOKEN or property cotatrack.providers.brapi.token
+ * - Token supplied via env BRAPI_TOKEN or property
+ * cotatrack.providers.brapi.token
  */
 @Slf4j
 public class BrapiQuoteProvider implements StockQuoteProvider {
@@ -53,8 +53,7 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         this(
                 HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build(),
                 resolveToken(),
-                Boolean.parseBoolean(System.getProperty("cotatrack.providers.brapi.enabled", "true"))
-        );
+                Boolean.parseBoolean(System.getProperty("cotatrack.providers.brapi.enabled", "true")));
     }
 
     public BrapiQuoteProvider(HttpClient httpClient, String apiToken, boolean enabled) {
@@ -114,7 +113,8 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
     }
 
     @Override
-    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval, Range range) throws Exception {
+    public List<HistoricalQuote> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval,
+            Range range) throws Exception {
         String brapiRange = (range != null) ? mapRange(range) : "1mo";
         String brapiInterval = (interval != null) ? mapInterval(interval) : "1d";
 
@@ -198,21 +198,29 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         }
 
         Double price = item.has("regularMarketPrice") && !item.get("regularMarketPrice").isNull()
-                ? item.get("regularMarketPrice").asDouble() : null;
+                ? item.get("regularMarketPrice").asDouble()
+                : null;
         Double change = item.has("regularMarketChange") && !item.get("regularMarketChange").isNull()
-                ? item.get("regularMarketChange").asDouble() : null;
+                ? item.get("regularMarketChange").asDouble()
+                : null;
         Double changePct = item.has("regularMarketChangePercent") && !item.get("regularMarketChangePercent").isNull()
-                ? item.get("regularMarketChangePercent").asDouble() : null;
+                ? item.get("regularMarketChangePercent").asDouble()
+                : null;
         Double open = item.has("regularMarketOpen") && !item.get("regularMarketOpen").isNull()
-                ? item.get("regularMarketOpen").asDouble() : null;
+                ? item.get("regularMarketOpen").asDouble()
+                : null;
         Double high = item.has("regularMarketDayHigh") && !item.get("regularMarketDayHigh").isNull()
-                ? item.get("regularMarketDayHigh").asDouble() : price;
+                ? item.get("regularMarketDayHigh").asDouble()
+                : price;
         Double low = item.has("regularMarketDayLow") && !item.get("regularMarketDayLow").isNull()
-                ? item.get("regularMarketDayLow").asDouble() : price;
+                ? item.get("regularMarketDayLow").asDouble()
+                : price;
         Double prevClose = item.has("regularMarketPreviousClose") && !item.get("regularMarketPreviousClose").isNull()
-                ? item.get("regularMarketPreviousClose").asDouble() : null;
+                ? item.get("regularMarketPreviousClose").asDouble()
+                : null;
         Long volume = item.has("regularMarketVolume") && !item.get("regularMarketVolume").isNull()
-                ? item.get("regularMarketVolume").asLong() : null;
+                ? item.get("regularMarketVolume").asLong()
+                : null;
 
         q.setRegularMarketPrice(price);
         q.setRegularMarketChange(change);
@@ -240,9 +248,11 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         }
 
         Double high52 = item.has("fiftyTwoWeekHigh") && !item.get("fiftyTwoWeekHigh").isNull()
-                ? item.get("fiftyTwoWeekHigh").asDouble() : null;
+                ? item.get("fiftyTwoWeekHigh").asDouble()
+                : null;
         Double low52 = item.has("fiftyTwoWeekLow") && !item.get("fiftyTwoWeekLow").isNull()
-                ? item.get("fiftyTwoWeekLow").asDouble() : null;
+                ? item.get("fiftyTwoWeekLow").asDouble()
+                : null;
         q.setFiftyTwoWeekHigh(high52);
         q.setFiftyTwoWeekLow(low52);
 
@@ -252,7 +262,8 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         }
 
         Long marketCap = item.has("marketCap") && !item.get("marketCap").isNull()
-                ? item.get("marketCap").asLong() : null;
+                ? item.get("marketCap").asLong()
+                : null;
         q.setMarketCap(marketCap);
 
         // Parse historical data if present in response
@@ -277,7 +288,8 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
     }
 
     private String cleanSymbol(String symbol) {
-        if (symbol == null) return "";
+        if (symbol == null)
+            return "";
         String s = symbol.trim().toUpperCase();
         if (s.startsWith("BMFBOVESPA:")) {
             s = s.substring("BMFBOVESPA:".length());
@@ -289,17 +301,20 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
     }
 
     private String mapRange(Range range) {
-        if (range == null) return "1mo";
+        if (range == null)
+            return "1mo";
         return range.getTag();
     }
 
     private String mapInterval(Interval interval) {
-        if (interval == null) return "1d";
+        if (interval == null)
+            return "1d";
         return interval.getTag();
     }
 
     private String sanitizeMessage(String message) {
-        if (message == null) return "Unknown error";
+        if (message == null)
+            return "Unknown error";
         if (apiToken != null && !apiToken.isBlank()) {
             return message.replace(apiToken, "***");
         }
