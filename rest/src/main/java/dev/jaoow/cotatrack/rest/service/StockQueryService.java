@@ -113,6 +113,8 @@ public class StockQueryService {
                 throw new NotFoundException("No FX quotes found for the given symbols.");
             }
             return quotesMap;
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(e.getMessage());
         } catch (IOException e) {
             throw new FailedFetchException("Failed to fetch FX quotes. Please try again later.");
         }

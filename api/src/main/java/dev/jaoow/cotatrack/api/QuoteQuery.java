@@ -136,8 +136,7 @@ public class QuoteQuery {
      * @throws IOException if an I/O error occurs
      */
     public FxQuote fetchFx() throws IOException {
-        FxQuoteRequest request = new FxQuoteRequest(symbol);
-        return request.getSingleResult();
+        return dev.jaoow.cotatrack.api.provider.forex.FxOrchestratorHolder.getOrchestrator().fetchQuote(symbol);
     }
 
     /**
@@ -147,14 +146,7 @@ public class QuoteQuery {
      * @throws IOException if an I/O error occurs
      */
     public Map<String, FxQuote> fetchFxMultiple() throws IOException {
-        FxQuoteRequest request = new FxQuoteRequest(String.join(",", symbols));
-        List<FxQuote> quotes = request.getResult();
-        Map<String, FxQuote> result = new HashMap<>();
-
-        for (FxQuote quote : quotes) {
-            result.put(quote.getSymbol(), quote);
-        }
-
-        return result;
+        List<String> symbolList = symbols != null ? Arrays.asList(symbols) : Collections.emptyList();
+        return dev.jaoow.cotatrack.api.provider.forex.FxOrchestratorHolder.getOrchestrator().fetchQuotes(symbolList);
     }
 }

@@ -271,3 +271,41 @@ Ao consultar `/api/quote/{symbols}`:
 Múltiplas requisições simultâneas para o mesmo símbolo (ex: 10 threads consultando `PETR4` ao mesmo tempo) disparam **apenas uma chamada ao provedor**.
 As outras 9 threads aguardam e compartilham a mesma resposta do `CompletableFuture`, sem duplicar tráfego externo.
 
+---
+
+## 6. Provedor de Câmbio e Forex (BCB PTAX & Fallback) (Fase 5)
+
+No endpoint `/api/forex/{symbols}`, as cotações são atendidas primariamente pelo **Banco Central do Brasil** através da API aberta **Olinda PTAX**, com fallback transparente para o **Yahoo Finance** e proteção por cache Caffeine.
+
+### 6.1 Moedas Suportadas
+
+São suportadas as 10 moedas oficiais da grade PTAX do Banco Central, negociadas contra o Real (`BRL`):
+
+| Código | Moeda | Formatos e Aliases Aceitos | Par Yahoo (Fallback) |
+| :--- | :--- | :--- | :--- |
+| `USD` | Dólar dos Estados Unidos | `USD`, `USDBRL`, `USD-BRL`, `USDBRL=X`, `BRL=X` | `USDBRL=X` |
+| `EUR` | Euro | `EUR`, `EURBRL`, `EUR-BRL`, `EURBRL=X` | `EURBRL=X` |
+| `GBP` | Libra Esterlina | `GBP`, `GBPBRL`, `GBP-BRL`, `GBPBRL=X` | `GBPBRL=X` |
+| `CAD` | Dólar Canadense | `CAD`, `CADBRL`, `CAD-BRL`, `CADBRL=X` | `CADBRL=X` |
+| `AUD` | Dólar Australiano | `AUD`, `AUDBRL`, `AUD-BRL`, `AUDBRL=X` | `AUDBRL=X` |
+| `CHF` | Franco Suíço | `CHF`, `CHFBRL`, `CHF-BRL`, `CHFBRL=X` | `CHFBRL=X` |
+| `JPY` | Iene Japonês | `JPY`, `JPYBRL`, `JPY-BRL`, `JPYBRL=X` | `JPYBRL=X` |
+| `DKK` | Coroa Dinamarquesa | `DKK`, `DKKBRL`, `DKK-BRL`, `DKKBRL=X` | `DKKBRL=X` |
+| `NOK` | Coroa Norueguesa | `NOK`, `NOKBRL`, `NOK-BRL`, `NOKBRL=X` | `NOKBRL=X` |
+| `SEK` | Coroa Sueca | `SEK`, `SEKBRL`, `SEK-BRL`, `SEKBRL=X` | `SEKBRL=X` |
+
+### 6.2 Validação e Erro para Moedas Não Cobertas
+Se um símbolo não suportado for enviado (ex: `BTC`, `CNY`, `XYZ`), a API rejeita com **HTTP 400 Bad Request** e mensagem descritiva:
+```json
+{
+  "error": true,
+  "message": "Moeda ou par não suportado: 'XYZ'. Pares suportados pelo Banco Central (PTAX): USD, EUR, GBP, CAD, AUD, CHF, JPY, DKK, NOK, SEK (ex: USD, USDBRL, EUR, EURBRL, GBP, JPY)."
+}
+```
+
+### 6.3 Resiliência e Fallback
+1. O provedor primário [`BcbPtaxFxProvider`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/forex/BcbPtaxFxProvider.java) consulta o serviço Olinda PTAX (`CotacaoMoedaPeriodo`) com janela móvel retroativa de 7 dias, garantindo cotação oficial mesmo em fins de semana, feriados e manhãs antes do primeiro boletim diário.
+2. Para o dólar (`USD`), existe fallback interno secundário via SGS série 1 (`api.bcb.gov.br/dados/serie/bcdata.sgs.1`).
+3. Se o Banco Central estiver indisponível ou retornar erro, o [`FxOrchestrator`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/forex/FxOrchestrator.java) redireciona imediatamente para o [`YahooFxProvider`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/forex/YahooFxProvider.java) (Yahoo v8 Chart e v7 Quote), preenchendo o campo `provider: "YAHOO (fallback)"`.
+
+

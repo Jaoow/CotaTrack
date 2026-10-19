@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
+import dev.jaoow.cotatrack.api.requests.quotes.model.FxQuote;
 import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import java.util.*;
  *     <li><b>Historical Daily Candles:</b> TTL 6 to 12 hours (default 12h)</li>
  *     <li><b>Dividends & Proventos:</b> TTL 24 hours</li>
  *     <li><b>Logos & Cadastro:</b> TTL 7 days</li>
+ *     <li><b>Forex / Câmbio:</b> TTL 5 minutes</li>
  *     <li><b>Stale Cache:</b> TTL 24 hours (disaster-recovery fallback)</li>
  * </ul>
  */
@@ -36,6 +38,7 @@ public class CotaTrackCacheManager {
     private final Cache<String, List<HistoricalQuote>> historicalCache;
     private final Cache<String, DividendsData> dividendsCache;
     private final Cache<String, String> logoCache;
+    private final Cache<String, FxQuote> fxQuoteCache;
 
     public CotaTrackCacheManager() {
         this(CacheConfig.fromSystemProperties());
@@ -70,6 +73,12 @@ public class CotaTrackCacheManager {
         this.logoCache = Caffeine.newBuilder()
                 .expireAfterWrite(this.config.getLogoTtl())
                 .maximumSize(this.config.getMaxLogosCacheSize())
+                .recordStats()
+                .build();
+
+        this.fxQuoteCache = Caffeine.newBuilder()
+                .expireAfterWrite(this.config.getQuoteIntradayTtl())
+                .maximumSize(500)
                 .recordStats()
                 .build();
 
@@ -180,12 +189,44 @@ public class CotaTrackCacheManager {
         }
     }
 
+    // --- FX Quote Cache Helpers ---
+
+    public FxQuote getFxQuote(String symbol) {
+        if (symbol == null) return null;
+        return fxQuoteCache.getIfPresent(symbol.trim().toUpperCase());
+    }
+
+    public Map<String, FxQuote> getFxQuotes(Collection<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) return Collections.emptyMap();
+        Map<String, FxQuote> found = new LinkedHashMap<>();
+        for (String s : symbols) {
+            FxQuote q = getFxQuote(s);
+            if (q != null) {
+                found.put(s, q);
+            }
+        }
+        return found;
+    }
+
+    public void putFxQuote(String symbol, FxQuote quote) {
+        if (symbol != null && quote != null) {
+            fxQuoteCache.put(symbol.trim().toUpperCase(), quote);
+        }
+    }
+
+    public void putFxQuotes(Map<String, FxQuote> quotes) {
+        if (quotes != null) {
+            quotes.forEach(this::putFxQuote);
+        }
+    }
+
     public void clearAll() {
         intradayQuoteCache.invalidateAll();
         staleQuoteCache.invalidateAll();
         historicalCache.invalidateAll();
         dividendsCache.invalidateAll();
         logoCache.invalidateAll();
+        fxQuoteCache.invalidateAll();
     }
 
     private String normalize(String s) {
