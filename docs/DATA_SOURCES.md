@@ -243,3 +243,31 @@ Note que campos como `dividendYield`, `dividendRate` e `marketCap` não aparecem
   "fiftyTwoWeekLowChange": 60.73
 }
 ```
+
+---
+
+## 5. Arquitetura de Cache e Coalescência em Lote (Fase 4)
+
+A partir da Fase 4, o CotaTrack adota uma estratégia multi-camada com o Caffeine Cache e SingleFlight:
+
+### 5.1 TTLs por Tipo de Dado (Configuráveis)
+
+| Categoria de Dado | TTL Padrão | Propriedade de Configuração | Finalidade |
+| :--- | :--- | :--- | :--- |
+| **Cotação Intraday** | `5m` (3-5 min) | `cotatrack.cache.quote-intraday-ttl` | Preços de negociação em tempo real na B3 |
+| **Histórico Diário** | `12h` (6-12 h) | `cotatrack.cache.history-daily-ttl` | Velas OHLCV diárias para gráficos e cálculo de indicadores |
+| **Proventos (Dividendos)** | `24h` | `cotatrack.cache.dividends-ttl` | Dados corporativos da B3 (JCP, dividendos, rendimentos FII) |
+| **Logos & Cadastro** | `7d` (7 dias) | `cotatrack.cache.logo-ttl` | Metadados institucionais e logos SVG/PNG |
+| **Disaster-Recovery (Stale)** | `24h` | `cotatrack.cache.stale-ttl` | Cotações anteriores servidas em caso de indisponibilidade geral |
+
+Os valores suportam formatos legíveis por humanos: `"5m"`, `"300s"`, `"12h"`, `"24h"`, `"7d"`.
+
+### 5.2 Agrupamento em Lote (Batching)
+Ao consultar `/api/quote/{symbols}`:
+1. Símbolos já presentes no cache intraday são devolvidos imediatamente sem chamadas de rede.
+2. Símbolos **não cacheados** são agrupados e enviados em **uma única requisição POST** ao scanner do TradingView (`scanner.tradingview.com/brazil/scan` com `tickers: [...]`), evitando $N$ requisições pontuais.
+
+### 5.3 SingleFlight (Thundering Herd / Cache Stampede Prevention)
+Múltiplas requisições simultâneas para o mesmo símbolo (ex: 10 threads consultando `PETR4` ao mesmo tempo) disparam **apenas uma chamada ao provedor**.
+As outras 9 threads aguardam e compartilham a mesma resposta do `CompletableFuture`, sem duplicar tráfego externo.
+

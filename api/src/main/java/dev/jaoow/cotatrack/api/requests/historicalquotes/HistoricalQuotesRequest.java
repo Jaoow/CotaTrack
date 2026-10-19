@@ -58,6 +58,14 @@ public class HistoricalQuotesRequest {
      * @return the historical quotes
      */
     public List<HistoricalQuote> getResult() {
+        String cleanSymbol = this.symbol != null ? this.symbol.toUpperCase().replace(".SA", "") : "";
+        String cacheKey = cleanSymbol + ":" + this.from + ":" + this.to + ":" + this.interval + ":" + this.range;
+
+        List<HistoricalQuote> cached = dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager.getInstance().getHistorical(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         JsonNode data = null;
         try {
             data = fetchData();
@@ -73,9 +81,15 @@ public class HistoricalQuotesRequest {
         JsonNode timestamps = resultNode.get("timestamp");
         JsonNode indicators = resultNode.get("indicators");
 
-        return IntStream.range(0, timestamps.size())
+        List<HistoricalQuote> quotes = IntStream.range(0, timestamps.size())
                 .mapToObj(i -> createHistoricalQuote(timestamps, indicators, i))
                 .collect(Collectors.toList());
+
+        if (!quotes.isEmpty()) {
+            dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager.getInstance().putHistorical(cacheKey, quotes);
+        }
+
+        return quotes;
     }
 
     private HistoricalQuote createHistoricalQuote(JsonNode timestamps, JsonNode indicators, int index) {

@@ -1,5 +1,7 @@
 package dev.jaoow.cotatrack.rest.config;
 
+import dev.jaoow.cotatrack.api.cache.CacheConfig;
+import dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.provider.impl.BrapiQuoteProvider;
 import dev.jaoow.cotatrack.api.provider.impl.TradingViewQuoteProvider;
@@ -34,8 +36,39 @@ public class ProviderConfiguration {
     @Value("${cotatrack.providers.brapi.token:}")
     private String brapiToken;
 
+    @Value("${cotatrack.cache.quote-intraday-ttl:5m}")
+    private String quoteIntradayTtl;
+
+    @Value("${cotatrack.cache.history-daily-ttl:12h}")
+    private String historyDailyTtl;
+
+    @Value("${cotatrack.cache.dividends-ttl:24h}")
+    private String dividendsTtl;
+
+    @Value("${cotatrack.cache.logo-ttl:7d}")
+    private String logoTtl;
+
+    @Value("${cotatrack.cache.stale-ttl:24h}")
+    private String staleTtl;
+
     @Bean
-    public ProviderOrchestrator providerOrchestrator() {
+    public CotaTrackCacheManager cotaTrackCacheManager() {
+        CacheConfig config = CacheConfig.builder()
+                .quoteIntradayTtl(CacheConfig.parseDuration(quoteIntradayTtl, CacheConfig.DEFAULT_QUOTE_INTRADAY_TTL))
+                .historyDailyTtl(CacheConfig.parseDuration(historyDailyTtl, CacheConfig.DEFAULT_HISTORY_DAILY_TTL))
+                .dividendsTtl(CacheConfig.parseDuration(dividendsTtl, CacheConfig.DEFAULT_DIVIDENDS_TTL))
+                .logoTtl(CacheConfig.parseDuration(logoTtl, CacheConfig.DEFAULT_LOGO_TTL))
+                .staleTtl(CacheConfig.parseDuration(staleTtl, CacheConfig.DEFAULT_STALE_TTL))
+                .build();
+
+        CotaTrackCacheManager manager = new CotaTrackCacheManager(config);
+        CotaTrackCacheManager.setInstance(manager);
+        log.info("Initialized Spring CotaTrackCacheManager with config: {}", config);
+        return manager;
+    }
+
+    @Bean
+    public ProviderOrchestrator providerOrchestrator(CotaTrackCacheManager cacheManager) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
@@ -63,7 +96,7 @@ public class ProviderConfiguration {
         }
 
         log.info("Initialized ProviderOrchestrator with order: {}", ordered.stream().map(StockQuoteProvider::getName).toList());
-        ProviderOrchestrator orchestrator = new ProviderOrchestrator(ordered);
+        ProviderOrchestrator orchestrator = new ProviderOrchestrator(ordered, cacheManager);
         ProviderOrchestratorHolder.setOrchestrator(orchestrator);
         return orchestrator;
     }

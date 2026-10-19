@@ -9,10 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LogoIdFetcher {
 
-    private static final LoadingCache<String, String> cache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .build(LogoIdFetcher::fetchLogoIdFromAPI);
-
     /**
      * Fetches the logo id for the given exchange and symbol.
      *
@@ -21,8 +17,17 @@ public class LogoIdFetcher {
      * @return the logo id
      */
     public static String fetchLogoId(String exchangeKey, String symbol) {
-        String cacheKey = exchangeKey + ":" + symbol;
-        return cache.get(cacheKey);
+        if (exchangeKey == null || symbol == null) return null;
+        String cleanSymbol = symbol.trim().toUpperCase().replace(".SA", "");
+        String cacheKey = exchangeKey.trim().toUpperCase() + ":" + cleanSymbol;
+        try {
+            return dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager.getInstance()
+                    .getLogoCache()
+                    .get(cacheKey, LogoIdFetcher::fetchLogoIdFromAPI);
+        } catch (Exception e) {
+            log.warn("Failed to fetch logo id for {}", cacheKey, e);
+            return null;
+        }
     }
 
     private static String fetchLogoIdFromAPI(String cacheKey) {

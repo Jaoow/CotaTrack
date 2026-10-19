@@ -20,11 +20,6 @@ public class DividendsRequest {
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private static final LoadingCache<String, DividendsData> cache = Caffeine.newBuilder()
-            .expireAfterWrite(1, TimeUnit.HOURS)
-            .maximumSize(100)
-            .build(DividendsRequest::fetchDividendsData);
-
     private final String symbol;
 
     /**
@@ -33,10 +28,16 @@ public class DividendsRequest {
      * @return the dividends data
      */
     public DividendsData getResult() {
+        if (symbol == null || symbol.isBlank()) {
+            return null;
+        }
+        String cleanSymbol = symbol.trim().toUpperCase().replace(".SA", "");
         try {
-            return cache.get(symbol);
+            return dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager.getInstance()
+                    .getDividendsCache()
+                    .get(cleanSymbol, DividendsRequest::fetchDividendsData);
         } catch (Exception e) {
-            log.error("Failed to fetch company data", e);
+            log.error("Failed to fetch company data for {}", cleanSymbol, e);
             return null;
         }
     }
