@@ -49,6 +49,11 @@ public class ProviderOrchestrator {
     @Getter
     private final BatchQuoteCoalescer batchQuoteCoalescer;
 
+    @Getter
+    private volatile String lastServingProvider = "UNKNOWN";
+    @Getter
+    private volatile boolean hadFallback = false;
+
     public ProviderOrchestrator() {
         this(createDefaultProviders(), CotaTrackCacheManager.getInstance(), new BatchQuoteCoalescer());
     }
@@ -142,6 +147,13 @@ public class ProviderOrchestrator {
                 .build();
     }
 
+    private static class FetchContext {
+        String lastServingProvider;
+        boolean fallbackOccurred;
+    }
+
+    private final ThreadLocal<FetchContext> currentFetchContext = ThreadLocal.withInitial(FetchContext::new);
+
     /**
      * Fetches quotes for multiple symbols:
      * <ol>
@@ -191,38 +203,56 @@ public class ProviderOrchestrator {
                     .build();
         }
 
-        // 2. Coalesce concurrent calls for uncached symbols & execute single batch provider fetch
-        log.info("Fetching {} uncached symbols in batch: {}", uncachedSymbols.size(), uncachedSymbols);
-        Map<String, Quote> newlyFetched = batchQuoteCoalescer.coalesceAndFetch(uncachedSymbols, this::executeProviderFallbackChain);
+        currentFetchContext.remove();
+        FetchContext context = currentFetchContext.get();
 
-        if (newlyFetched != null && !newlyFetched.isEmpty()) {
-            accumulatedQuotes.putAll(newlyFetched);
-        }
+        try {
+            // 2. Coalesce concurrent calls for uncached symbols & execute single batch provider fetch
+            log.info("Fetching {} uncached symbols in batch: {}", uncachedSymbols.size(), uncachedSymbols);
+            Map<String, Quote> newlyFetched = batchQuoteCoalescer.coalesceAndFetch(uncachedSymbols, this::executeProviderFallbackChain);
 
-        // 3. Disaster-recovery: check stale 24h cache for any symbols that failed across all providers
-        boolean servedFromStale = false;
-        for (String sym : cleanSymbols) {
-            if (!accumulatedQuotes.containsKey(sym)) {
-                Quote staleQuote = cacheManager.getStaleQuote(sym);
-                if (staleQuote != null) {
-                    accumulatedQuotes.put(sym, staleQuote);
-                    servedFromStale = true;
-                    log.warn("Symbol {} rescued from 24h stale disaster cache", sym);
+            if (newlyFetched != null && !newlyFetched.isEmpty()) {
+                accumulatedQuotes.putAll(newlyFetched);
+            }
+
+            // 3. Disaster-recovery: check stale 24h cache for any symbols that failed across all providers
+            boolean servedFromStale = false;
+            for (String sym : cleanSymbols) {
+                if (!accumulatedQuotes.containsKey(sym)) {
+                    Quote staleQuote = cacheManager.getStaleQuote(sym);
+                    if (staleQuote != null) {
+                        accumulatedQuotes.put(sym, staleQuote);
+                        servedFromStale = true;
+                        log.warn("Symbol {} rescued from 24h stale disaster cache", sym);
+                    }
                 }
             }
+
+            long elapsedMs = System.currentTimeMillis() - startTime;
+            boolean allFromCache = uncachedSymbols.isEmpty();
+            String providerLabel;
+            if (allFromCache) {
+                providerLabel = "CACHE";
+            } else if (servedFromStale && (newlyFetched == null || newlyFetched.isEmpty())) {
+                providerLabel = "STALE_CACHE";
+            } else if (context.lastServingProvider != null) {
+                providerLabel = context.fallbackOccurred
+                        ? context.lastServingProvider + " (fallback)"
+                        : context.lastServingProvider;
+            } else {
+                providerLabel = servedFromStale ? "STALE_CACHE" : "MULTI_PROVIDER";
+            }
+
+            return ProviderResult.<Map<String, Quote>>builder()
+                    .data(accumulatedQuotes)
+                    .providerName(providerLabel)
+                    .fromCache(allFromCache || (servedFromStale && (newlyFetched == null || newlyFetched.isEmpty())))
+                    .stale(servedFromStale)
+                    .executionTimeMs(elapsedMs)
+                    .build();
+        } finally {
+            currentFetchContext.remove();
         }
-
-        long elapsedMs = System.currentTimeMillis() - startTime;
-        boolean allFromCache = uncachedSymbols.isEmpty();
-        String providerLabel = allFromCache ? "CACHE" : (servedFromStale ? "STALE_CACHE" : "MULTI_PROVIDER");
-
-        return ProviderResult.<Map<String, Quote>>builder()
-                .data(accumulatedQuotes)
-                .providerName(providerLabel)
-                .fromCache(allFromCache || servedFromStale)
-                .stale(servedFromStale)
-                .executionTimeMs(elapsedMs)
-                .build();
     }
 
     /**
@@ -232,8 +262,10 @@ public class ProviderOrchestrator {
     private Map<String, Quote> executeProviderFallbackChain(List<String> batch) {
         Map<String, Quote> result = new LinkedHashMap<>();
         Set<String> remainingSymbols = new LinkedHashSet<>(batch);
+        FetchContext context = currentFetchContext.get();
 
-        for (StockQuoteProvider provider : providers) {
+        for (int i = 0; i < providers.size(); i++) {
+            StockQuoteProvider provider = providers.get(i);
             if (!provider.isEnabled()) {
                 log.debug("Provider {} is disabled, skipping.", provider.getName());
                 continue;
@@ -245,12 +277,18 @@ public class ProviderOrchestrator {
             CircuitBreaker cb = circuitBreakers.get(provider.getName());
             if (cb != null && !cb.tryAcquirePermission()) {
                 log.warn("Circuit breaker for provider {} is OPEN. Falling back to next provider...", provider.getName());
+                dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance()
+                        .recordFailure(provider.getName(), "Circuit breaker is OPEN");
+                context.fallbackOccurred = true;
                 continue;
             }
 
             RateLimiter rl = rateLimiters.get(provider.getName());
             if (rl != null && !rl.acquirePermission()) {
                 log.warn("Rate limiter for provider {} rejected request. Falling back to next provider...", provider.getName());
+                dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance()
+                        .recordFailure(provider.getName(), "Rate limiter rejected request");
+                context.fallbackOccurred = true;
                 continue;
             }
 
@@ -265,6 +303,8 @@ public class ProviderOrchestrator {
                 }
 
                 if (fetched != null && !fetched.isEmpty()) {
+                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance()
+                            .recordSuccess(provider.getName());
                     int servedCount = 0;
                     for (String reqSym : queryList) {
                         Quote q = findQuoteInMap(fetched, reqSym);
@@ -277,15 +317,30 @@ public class ProviderOrchestrator {
                             servedCount++;
                         }
                     }
+                    if (servedCount > 0) {
+                        context.lastServingProvider = provider.getName();
+                        if (i > 0) {
+                            context.fallbackOccurred = true;
+                        }
+                    }
                     log.info("Provider {} served {}/{} requested symbols in batch", provider.getName(), servedCount, queryList.size());
+                    if (!remainingSymbols.isEmpty()) {
+                        context.fallbackOccurred = true;
+                    }
                 } else {
                     log.warn("Provider {} returned empty results for batch {}. Trying fallback...", provider.getName(), queryList);
+                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance()
+                            .recordFailure(provider.getName(), "Returned empty batch results");
+                    context.fallbackOccurred = true;
                 }
 
             } catch (Exception e) {
                 if (cb != null) {
                     cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
                 }
+                dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance()
+                        .recordFailure(provider.getName(), e);
+                context.fallbackOccurred = true;
                 log.warn("Provider {} failed ({}) for batch: {}. Attempting fallback...",
                         provider.getName(), e.getMessage(), remainingSymbols);
             }

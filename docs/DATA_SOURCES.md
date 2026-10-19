@@ -308,4 +308,28 @@ Se um símbolo não suportado for enviado (ex: `BTC`, `CNY`, `XYZ`), a API rejei
 2. Para o dólar (`USD`), existe fallback interno secundário via SGS série 1 (`api.bcb.gov.br/dados/serie/bcdata.sgs.1`).
 3. Se o Banco Central estiver indisponível ou retornar erro, o [`FxOrchestrator`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/forex/FxOrchestrator.java) redireciona imediatamente para o [`YahooFxProvider`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/forex/YahooFxProvider.java) (Yahoo v8 Chart e v7 Quote), preenchendo o campo `provider: "YAHOO (fallback)"`.
 
+---
+
+## 7. Observabilidade, Saúde e Diagnóstico (Fase 6)
+
+A API disponibiliza endpoints de diagnóstico e saúde em `/api/health` e `/api/diagnostics` gerenciados pelo [`DiagnosticsController`](file:///home/jaoow/IdeaProjects/CotaTrack/rest/src/main/java/dev/jaoow/cotatrack/rest/controller/DiagnosticsController.java) e monitorados em tempo de execução pelo [`ProviderHealthTracker`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/health/ProviderHealthTracker.java):
+
+### 7.1 Métricas Rastreadas por Provedor
+Para cada provedor (TradingView, Yahoo Chart, brapi.dev, BCB PTAX, Yahoo FX):
+- **Status Operacional:** `HEALTHY`, `DEGRADED`, `CIRCUIT_OPEN` ou `DISABLED`.
+- **Circuit Breaker:** Estado em tempo real do disjuntor Resilience4j (`CLOSED`, `OPEN`, `HALF_OPEN`).
+- **Timestamps:** Data/hora ISO-8601 da última requisição com sucesso (`lastSuccess`) e da última falha (`lastFailure`).
+- **Motivo de Falha Sanitizado:** Descrição resumida da última exceção com remoção rigorosa de quaisquer parâmetros sensíveis (`token=`, `cookie=`, `crumb=`, etc.).
+- **Contadores de Tráfego:** Total de requisições disparadas, requisições bem-sucedidas e requisições falhadas.
+
+### 7.2 Métricas de Cache em Memória
+Exposição em tempo real do tamanho estimado de todas as tabelas de cache Caffeine:
+- `intradayQuotes` (TTL 3-5m)
+- `historicalQuotes` (TTL 6-12h)
+- `dividends` (TTL 24h)
+- `logos` (TTL 7d)
+- `forexQuotes` (TTL 5m)
+- `staleDisasterQuotes` (TTL 24h)
+
+
 

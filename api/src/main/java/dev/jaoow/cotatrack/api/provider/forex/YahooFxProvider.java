@@ -75,6 +75,7 @@ public class YahooFxProvider implements FxQuoteProvider {
             try {
                 FxQuote quote = queryYahooChart(rawSym, ticker, name);
                 if (quote != null) {
+                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
                     results.put(rawSym, quote);
                 } else {
                     // Try legacy FxQuoteRequest
@@ -85,10 +86,14 @@ public class YahooFxProvider implements FxQuoteProvider {
                         legacyQuote.setName(name);
                         legacyQuote.setCurrency("BRL");
                         legacyQuote.setProvider(PROVIDER_NAME + " (fallback)");
+                        dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
                         results.put(rawSym, legacyQuote);
+                    } else {
+                        dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, "Empty response for " + ticker);
                     }
                 }
             } catch (Exception e) {
+                dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, e);
                 log.warn("Yahoo FX provider failed for symbol {}: {}", rawSym, e.getMessage());
             }
         }

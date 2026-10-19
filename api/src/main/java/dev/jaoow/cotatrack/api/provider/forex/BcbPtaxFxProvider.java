@@ -112,11 +112,18 @@ public class BcbPtaxFxProvider implements FxQuoteProvider {
 
     private FxQuote queryBcbForCurrency(String requestedSymbol, BcbCurrencyMapper.CurrencyInfo info) {
         try {
-            return queryOlinda(requestedSymbol, info);
+            FxQuote quote = queryOlinda(requestedSymbol, info);
+            dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+            return quote;
         } catch (Exception e) {
+            dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordFailure(PROVIDER_NAME, e);
             log.warn("BCB Olinda failed for currency {}: {}. Attempting fallback...", info.code(), e.getMessage());
             if ("USD".equalsIgnoreCase(info.code())) {
-                return querySgsUsd(requestedSymbol, info);
+                FxQuote sgs = querySgsUsd(requestedSymbol, info);
+                if (sgs != null) {
+                    dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker.getInstance().recordSuccess(PROVIDER_NAME);
+                    return sgs;
+                }
             }
             throw new ProviderException(PROVIDER_NAME, 500, "Olinda PTAX failed: " + e.getMessage());
         }
