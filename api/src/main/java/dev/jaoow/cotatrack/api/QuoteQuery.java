@@ -1,5 +1,9 @@
 package dev.jaoow.cotatrack.api;
 
+import dev.jaoow.cotatrack.api.provider.ProviderResult;
+import dev.jaoow.cotatrack.api.provider.orchestrator.ProviderOrchestrator;
+import dev.jaoow.cotatrack.api.provider.orchestrator.ProviderOrchestratorHolder;
+import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.Interval;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.Range;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.HistoricalQuotesRequest;
@@ -14,10 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * QuoteQuery class provides methods to fetch stock quotes based on various parameters.
@@ -36,6 +37,9 @@ public class QuoteQuery {
 
     @Builder.Default
     private boolean includeDividends = false;
+
+    @Builder.Default
+    private ProviderOrchestrator orchestrator = ProviderOrchestratorHolder.getOrchestrator();
 
     /**
      * Fetches a stock quote based on the built query parameters.
@@ -70,12 +74,20 @@ public class QuoteQuery {
      * @throws IOException if an I/O error occurs
      */
     private Map<String, Quote> fetchQuotes(String query) throws IOException {
-        Map<String, Quote> result = new HashMap<>();
-        StockQuoteRequest request = new StockQuoteRequest(query);
+        List<String> symbolList = Arrays.asList(query.split(","));
+        ProviderOrchestrator orch = (orchestrator != null) ? orchestrator : ProviderOrchestratorHolder.getOrchestrator();
 
-        List<Quote> quotes = request.getResult();
-        for (Quote quote : quotes) {
-            result.put(quote.getSymbol(), quote);
+        ProviderResult<Map<String, Quote>> providerResult = orch.fetchQuotes(symbolList);
+        Map<String, Quote> result = new HashMap<>(providerResult.getData());
+
+        // If orchestrator returned empty for all symbols, attempt legacy StockQuoteRequest as emergency fallback
+        if (result.isEmpty()) {
+            log.warn("Orchestrator returned empty for {}. Attempting legacy StockQuoteRequest...", query);
+            StockQuoteRequest request = new StockQuoteRequest(query);
+            List<Quote> quotes = request.getResult();
+            for (Quote quote : quotes) {
+                result.put(quote.getSymbol(), quote);
+            }
         }
 
         boolean includeHistorical = from != null || to != null || interval != null || range != null;
@@ -83,16 +95,20 @@ public class QuoteQuery {
         if (includeHistorical) {
             log.info("Fetching historical data for {} symbols", result.size());
             for (Quote quote : result.values()) {
-                HistoricalQuotesRequest.Builder requestBuilder
-                        = HistoricalQuotesRequest.builder().symbol(quote.getSymbol());
-
-                Optional.ofNullable(from).ifPresent(requestBuilder::from);
-                Optional.ofNullable(to).ifPresent(requestBuilder::to);
-                Optional.ofNullable(interval).ifPresent(requestBuilder::interval);
-                Optional.ofNullable(range).ifPresent(requestBuilder::range);
-
-                HistoricalQuotesRequest historicalRequest = requestBuilder.build();
-                quote.fetchHistoricalQuotes(historicalRequest);
+                ProviderResult<List<HistoricalQuote>> histResult = orch.fetchHistorical(
+                        quote.getSymbol(), from, to, interval, range
+                );
+                if (histResult.getData() != null && !histResult.getData().isEmpty()) {
+                    quote.setHistoricalQuotes(histResult.getData());
+                } else {
+                    HistoricalQuotesRequest.Builder requestBuilder
+                            = HistoricalQuotesRequest.builder().symbol(quote.getSymbol());
+                    Optional.ofNullable(from).ifPresent(requestBuilder::from);
+                    Optional.ofNullable(to).ifPresent(requestBuilder::to);
+                    Optional.ofNullable(interval).ifPresent(requestBuilder::interval);
+                    Optional.ofNullable(range).ifPresent(requestBuilder::range);
+                    quote.fetchHistoricalQuotes(requestBuilder.build());
+                }
             }
         }
 
