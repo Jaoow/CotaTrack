@@ -3,6 +3,7 @@ package dev.jaoow.cotatrack.api.provider.impl;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderException;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -196,14 +197,22 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
             q.setLogoUrl(logoUrl);
         }
 
-        double price = item.path("regularMarketPrice").asDouble(0.0);
-        double change = item.path("regularMarketChange").asDouble(0.0);
-        double changePct = item.path("regularMarketChangePercent").asDouble(0.0);
-        double open = item.path("regularMarketOpen").asDouble(price);
-        double high = item.path("regularMarketDayHigh").asDouble(price);
-        double low = item.path("regularMarketDayLow").asDouble(price);
-        double prevClose = item.path("regularMarketPreviousClose").asDouble(price - change);
-        long volume = item.path("regularMarketVolume").asLong(0L);
+        Double price = item.has("regularMarketPrice") && !item.get("regularMarketPrice").isNull()
+                ? item.get("regularMarketPrice").asDouble() : null;
+        Double change = item.has("regularMarketChange") && !item.get("regularMarketChange").isNull()
+                ? item.get("regularMarketChange").asDouble() : null;
+        Double changePct = item.has("regularMarketChangePercent") && !item.get("regularMarketChangePercent").isNull()
+                ? item.get("regularMarketChangePercent").asDouble() : null;
+        Double open = item.has("regularMarketOpen") && !item.get("regularMarketOpen").isNull()
+                ? item.get("regularMarketOpen").asDouble() : null;
+        Double high = item.has("regularMarketDayHigh") && !item.get("regularMarketDayHigh").isNull()
+                ? item.get("regularMarketDayHigh").asDouble() : price;
+        Double low = item.has("regularMarketDayLow") && !item.get("regularMarketDayLow").isNull()
+                ? item.get("regularMarketDayLow").asDouble() : price;
+        Double prevClose = item.has("regularMarketPreviousClose") && !item.get("regularMarketPreviousClose").isNull()
+                ? item.get("regularMarketPreviousClose").asDouble() : null;
+        Long volume = item.has("regularMarketVolume") && !item.get("regularMarketVolume").isNull()
+                ? item.get("regularMarketVolume").asLong() : null;
 
         q.setRegularMarketPrice(price);
         q.setRegularMarketChange(change);
@@ -213,7 +222,11 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         q.setRegularMarketDayLow(low);
         q.setRegularMarketVolume(volume);
         q.setRegularMarketPreviousClose(prevClose);
-        q.setRegularMarketDayRange(item.path("regularMarketDayRange").asText(low + " - " + high));
+
+        String dayRange = item.path("regularMarketDayRange").asText(null);
+        if (dayRange != null && !dayRange.isBlank()) {
+            q.setRegularMarketDayRange(dayRange);
+        }
 
         String timeStr = item.path("regularMarketTime").asText(null);
         if (timeStr != null) {
@@ -226,16 +239,21 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
             q.setRegularMarketTime(new Date());
         }
 
-        double high52 = item.path("fiftyTwoWeekHigh").asDouble(high);
-        double low52 = item.path("fiftyTwoWeekLow").asDouble(low);
+        Double high52 = item.has("fiftyTwoWeekHigh") && !item.get("fiftyTwoWeekHigh").isNull()
+                ? item.get("fiftyTwoWeekHigh").asDouble() : null;
+        Double low52 = item.has("fiftyTwoWeekLow") && !item.get("fiftyTwoWeekLow").isNull()
+                ? item.get("fiftyTwoWeekLow").asDouble() : null;
         q.setFiftyTwoWeekHigh(high52);
         q.setFiftyTwoWeekLow(low52);
-        q.setFiftyTwoWeekRange(item.path("fiftyTwoWeekRange").asText(low52 + " - " + high52));
-        q.setFiftyTwoWeekHighChange(high52 > 0 ? price - high52 : 0.0);
-        q.setFiftyTwoWeekHighChangePercent(high52 > 0 ? (price - high52) / high52 : 0.0);
-        q.setFiftyTwoWeekLowChange(low52 > 0 ? price - low52 : 0.0);
 
-        q.setMarketCap(item.path("marketCap").asLong(0L));
+        String fiftyTwoRange = item.path("fiftyTwoWeekRange").asText(null);
+        if (fiftyTwoRange != null && !fiftyTwoRange.isBlank()) {
+            q.setFiftyTwoWeekRange(fiftyTwoRange);
+        }
+
+        Long marketCap = item.has("marketCap") && !item.get("marketCap").isNull()
+                ? item.get("marketCap").asLong() : null;
+        q.setMarketCap(marketCap);
 
         // Parse historical data if present in response
         JsonNode histNode = item.path("historicalDataPrice");
@@ -252,9 +270,10 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
                 histQuotes.add(new HistoricalQuote(date, o, l, hi, c, adj, v));
             }
             q.setHistoricalQuotes(histQuotes);
+            QuoteEnricher.enrichFromHistory(q, histQuotes);
         }
 
-        return q;
+        return QuoteEnricher.enrich(q);
     }
 
     private String cleanSymbol(String symbol) {

@@ -1,5 +1,6 @@
 package dev.jaoow.cotatrack.api;
 
+import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderResult;
 import dev.jaoow.cotatrack.api.provider.orchestrator.ProviderOrchestrator;
 import dev.jaoow.cotatrack.api.provider.orchestrator.ProviderOrchestratorHolder;
@@ -100,6 +101,7 @@ public class QuoteQuery {
                 );
                 if (histResult.getData() != null && !histResult.getData().isEmpty()) {
                     quote.setHistoricalQuotes(histResult.getData());
+                    QuoteEnricher.enrichFromHistory(quote, histResult.getData());
                 } else {
                     HistoricalQuotesRequest.Builder requestBuilder
                             = HistoricalQuotesRequest.builder().symbol(quote.getSymbol());
@@ -108,6 +110,9 @@ public class QuoteQuery {
                     Optional.ofNullable(interval).ifPresent(requestBuilder::interval);
                     Optional.ofNullable(range).ifPresent(requestBuilder::range);
                     quote.fetchHistoricalQuotes(requestBuilder.build());
+                    if (quote.getHistoricalQuotes() != null) {
+                        QuoteEnricher.enrichFromHistory(quote, quote.getHistoricalQuotes());
+                    }
                 }
             }
         }
@@ -116,9 +121,11 @@ public class QuoteQuery {
             log.info("Fetching dividends data for {} symbols", result.size());
             for (Quote quote : result.values()) {
                 quote.fetchDividendsData();
+                QuoteEnricher.enrichDividendsFromB3(quote, quote.getDividends());
             }
         }
 
+        result.values().forEach(QuoteEnricher::enrich);
         return result;
     }
 

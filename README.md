@@ -94,14 +94,21 @@ CotaTrack é uma API RESTful construída em Java com Spring Boot, projetada para
     - **Resposta**: JSON com a lista de ações.
 
 
+## 📚 Documentação de Fontes e Dados
+
+Para detalhes completos sobre a arquitetura multi-provedor (TradingView, Yahoo Chart, brapi.dev), a matriz de completude campo a campo, fórmulas de campos derivados (SMA200, médias de volume, faixas de preço) e regras de nulabilidade/serialização, consulte:
+- [Documentação de Fontes de Dados e Catálogo do Modelo Quote](docs/DATA_SOURCES.md)
+
 ## 🛠️ Tecnologias Utilizadas
 
 - **Java 17**
-- **Spring Boot**
+- **Spring Boot 3.3.2**
+- **Resilience4j** (Circuit Breakers e Rate Limiters por provedor)
 - **Maven**
 - **Lombok** para simplificação de código
-- **Jackson** para manipulação de JSON
-- **Caffeine** para cache de dados
+- **Jackson** para manipulação e serialização de JSON
+- **Caffeine** para cache multi-camada de dados
+- **JUnit 5 & AssertJ** para testes automatizados
 
 ## 🤝 Contribuição
 

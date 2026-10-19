@@ -7,6 +7,7 @@ import dev.jaoow.cotatrack.api.requests.dividends.DividendsRequest;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.HistoricalQuotesRequest;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -17,6 +18,7 @@ import java.util.List;
  * Represents a stock quote with market data, historical and dividends information.
  */
 @Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -37,39 +39,39 @@ public class Quote {
 
     private String logoUrl;
 
-    private double regularMarketChange;
-    private double regularMarketChangePercent;
+    private Double regularMarketChange;
+    private Double regularMarketChangePercent;
     private Date regularMarketTime;
 
-    private double regularMarketPrice;
-    private double regularMarketDayHigh;
+    private Double regularMarketPrice;
+    private Double regularMarketDayHigh;
     private String regularMarketDayRange;
-    private double regularMarketDayLow;
-    private long regularMarketVolume;
-    private double regularMarketPreviousClose;
-    private double regularMarketOpen;
+    private Double regularMarketDayLow;
+    private Long regularMarketVolume;
+    private Double regularMarketPreviousClose;
+    private Double regularMarketOpen;
 
-    private long averageDailyVolume3Month;
-    private long averageDailyVolume10Day;
+    private Long averageDailyVolume3Month;
+    private Long averageDailyVolume10Day;
 
-    private double twoHundredDayAverage;
-    private double twoHundredDayAverageChange;
-    private double twoHundredDayAverageChangePercent;
+    private Double twoHundredDayAverage;
+    private Double twoHundredDayAverageChange;
+    private Double twoHundredDayAverageChangePercent;
 
-    private double fiftyTwoWeekLowChange;
+    private Double fiftyTwoWeekLowChange;
     private String fiftyTwoWeekRange;
-    private double fiftyTwoWeekHighChange;
-    private double fiftyTwoWeekHighChangePercent;
-    private double fiftyTwoWeekLow;
-    private double fiftyTwoWeekHigh;
+    private Double fiftyTwoWeekHighChange;
+    private Double fiftyTwoWeekHighChangePercent;
+    private Double fiftyTwoWeekLow;
+    private Double fiftyTwoWeekHigh;
 
-    private double trailingAnnualDividendRate;
-    private double trailingAnnualDividendYield;
+    private Double trailingAnnualDividendRate;
+    private Double trailingAnnualDividendYield;
 
-    private double dividendRate;
-    private double dividendYield;
+    private Double dividendRate;
+    private Double dividendYield;
 
-    private long marketCap;
+    private Long marketCap;
 
     private List<HistoricalQuote> historicalQuotes;
     private DividendsData dividends;

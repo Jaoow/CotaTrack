@@ -3,6 +3,7 @@ package dev.jaoow.cotatrack.api.provider.impl;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderException;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -59,7 +60,11 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
         this.httpClient = httpClient;
         this.enabled = enabled;
         this.objectMapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        this.executorService = Executors.newFixedThreadPool(8);
+        this.executorService = Executors.newFixedThreadPool(8, r -> {
+            Thread t = new Thread(r, "yahoo-chart-worker");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     @Override
@@ -76,7 +81,7 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
     public Optional<Quote> fetchQuote(String symbol) throws Exception {
         String mappedSymbol = SymbolMapper.mapSymbol(symbol);
         String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL + URLEncoder.encode(mappedSymbol, StandardCharsets.UTF_8)
-                + "?interval=1d&range=1d";
+                + "?interval=1d&range=1y&events=div";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -211,13 +216,20 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
         q.setShortName(meta.path("shortName").asText(symbol));
         q.setLongName(meta.path("longName").asText(q.getShortName()));
 
-        double price = meta.path("regularMarketPrice").asDouble(0.0);
-        double changePct = meta.path("regularMarketChangePercent").asDouble(0.0);
-        double change = meta.path("fulldayChange").asDouble(0.0);
-        double prevClose = meta.path("chartPreviousClose").asDouble(price - change);
-        double high = meta.path("regularMarketDayHigh").asDouble(price);
-        double low = meta.path("regularMarketDayLow").asDouble(price);
-        long volume = meta.path("regularMarketVolume").asLong(0L);
+        Double price = meta.has("regularMarketPrice") && !meta.get("regularMarketPrice").isNull()
+                ? meta.get("regularMarketPrice").asDouble() : null;
+        Double changePct = meta.has("regularMarketChangePercent") && !meta.get("regularMarketChangePercent").isNull()
+                ? meta.get("regularMarketChangePercent").asDouble() : null;
+        Double change = meta.has("fulldayChange") && !meta.get("fulldayChange").isNull()
+                ? meta.get("fulldayChange").asDouble() : null;
+        Double prevClose = meta.has("chartPreviousClose") && !meta.get("chartPreviousClose").isNull()
+                ? meta.get("chartPreviousClose").asDouble() : null;
+        Double high = meta.has("regularMarketDayHigh") && !meta.get("regularMarketDayHigh").isNull()
+                ? meta.get("regularMarketDayHigh").asDouble() : price;
+        Double low = meta.has("regularMarketDayLow") && !meta.get("regularMarketDayLow").isNull()
+                ? meta.get("regularMarketDayLow").asDouble() : price;
+        Long volume = meta.has("regularMarketVolume") && !meta.get("regularMarketVolume").isNull()
+                ? meta.get("regularMarketVolume").asLong() : null;
 
         q.setRegularMarketPrice(price);
         q.setRegularMarketChange(change);
@@ -226,29 +238,61 @@ public class YahooChartQuoteProvider implements StockQuoteProvider {
         q.setRegularMarketDayHigh(high);
         q.setRegularMarketDayLow(low);
         q.setRegularMarketVolume(volume);
-        q.setRegularMarketDayRange(low + " - " + high);
 
         long timeSeconds = meta.path("regularMarketTime").asLong(System.currentTimeMillis() / 1000);
         q.setRegularMarketTime(new Date(timeSeconds * 1000));
 
-        double high52 = meta.path("fiftyTwoWeekHigh").asDouble(high);
-        double low52 = meta.path("fiftyTwoWeekLow").asDouble(low);
+        Double high52 = meta.has("fiftyTwoWeekHigh") && !meta.get("fiftyTwoWeekHigh").isNull()
+                ? meta.get("fiftyTwoWeekHigh").asDouble() : null;
+        Double low52 = meta.has("fiftyTwoWeekLow") && !meta.get("fiftyTwoWeekLow").isNull()
+                ? meta.get("fiftyTwoWeekLow").asDouble() : null;
         q.setFiftyTwoWeekHigh(high52);
         q.setFiftyTwoWeekLow(low52);
-        q.setFiftyTwoWeekRange(low52 + " - " + high52);
-        q.setFiftyTwoWeekHighChange(high52 > 0 ? price - high52 : 0.0);
-        q.setFiftyTwoWeekHighChangePercent(high52 > 0 ? (price - high52) / high52 : 0.0);
-        q.setFiftyTwoWeekLowChange(low52 > 0 ? price - low52 : 0.0);
 
         // Try extracting open from indicator if available
         JsonNode quoteIndicators = resultNode.path("indicators").path("quote").get(0);
         if (quoteIndicators != null && quoteIndicators.has("open") && quoteIndicators.path("open").size() > 0) {
-            q.setRegularMarketOpen(quoteIndicators.path("open").get(0).asDouble(prevClose));
-        } else {
-            q.setRegularMarketOpen(prevClose);
+            JsonNode openArr = quoteIndicators.path("open");
+            for (int i = openArr.size() - 1; i >= 0; i--) {
+                if (!openArr.get(i).isNull()) {
+                    q.setRegularMarketOpen(openArr.get(i).asDouble());
+                    break;
+                }
+            }
         }
 
-        return q;
+        // Parse historical candles if present to derive SMA200, 10d/3m volumes, and 52w extremes
+        JsonNode timestamps = resultNode.path("timestamp");
+        JsonNode indicators = resultNode.path("indicators");
+        if (timestamps.isArray() && indicators.isObject()) {
+            List<HistoricalQuote> candles = IntStream.range(0, timestamps.size())
+                    .mapToObj(i -> createHistoricalQuote(timestamps, indicators, i))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            QuoteEnricher.enrichFromHistory(q, candles);
+        }
+
+        // Parse dividend events from chart
+        JsonNode divEvents = resultNode.path("events").path("dividends");
+        if (divEvents.isObject() && !divEvents.isEmpty()) {
+            double divSum = 0.0;
+            Iterator<JsonNode> it = divEvents.elements();
+            while (it.hasNext()) {
+                JsonNode d = it.next();
+                divSum += d.path("amount").asDouble(0.0);
+            }
+            if (divSum > 0) {
+                q.setDividendRate(divSum);
+                q.setTrailingAnnualDividendRate(divSum);
+                if (price != null && price > 0) {
+                    double yield = (divSum / price) * 100.0;
+                    q.setDividendYield(yield);
+                    q.setTrailingAnnualDividendYield(yield);
+                }
+            }
+        }
+
+        return QuoteEnricher.enrich(q);
     }
 
     private HistoricalQuote createHistoricalQuote(JsonNode timestamps, JsonNode indicators, int index) {

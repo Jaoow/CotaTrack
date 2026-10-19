@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderException;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -38,7 +39,8 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
             "market_cap_basic", "currency", "exchange", "type", "subtype",
             "average_volume_30d_calc", "average_volume_10d_calc", "average_volume_90d_calc",
             "price_52_week_high", "price_52_week_low", "SMA200", "logoid",
-            "dividends_yield", "time"
+            "dividends_yield", "dividends_yield_current", "dps_common_stock_prim_issue_fy",
+            "dividend_amount_recent", "time"
     );
 
     private final HttpClient httpClient;
@@ -178,54 +180,49 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
             q.setLogoUrl("https://s3-symbol-logo.tradingview.com/" + logoId + ".svg");
         }
 
-        double close = getDouble(cols, "close", 0.0);
-        double changeAbs = getDouble(cols, "change_abs", 0.0);
-        double changePct = getDouble(cols, "change", 0.0);
-        double open = getDouble(cols, "open", 0.0);
-        double high = getDouble(cols, "high", close);
-        double low = getDouble(cols, "low", close);
-        long volume = getLong(cols, "volume", 0L);
-        double prevClose = close - changeAbs;
+        Double close = getDouble(cols, "close");
+        Double changeAbs = getDouble(cols, "change_abs");
+        Double changePct = getDouble(cols, "change");
+        Double open = getDouble(cols, "open");
+        Double high = getDouble(cols, "high");
+        Double low = getDouble(cols, "low");
+        Long volume = getLong(cols, "volume");
 
         q.setRegularMarketPrice(close);
         q.setRegularMarketChange(changeAbs);
         q.setRegularMarketChangePercent(changePct);
         q.setRegularMarketOpen(open);
-        q.setRegularMarketDayHigh(high);
-        q.setRegularMarketDayLow(low);
+        q.setRegularMarketDayHigh(high != null ? high : close);
+        q.setRegularMarketDayLow(low != null ? low : close);
         q.setRegularMarketVolume(volume);
-        q.setRegularMarketPreviousClose(prevClose);
-        q.setRegularMarketDayRange(low + " - " + high);
 
-        long timeSeconds = getLong(cols, "time", System.currentTimeMillis() / 1000);
-        q.setRegularMarketTime(new Date(timeSeconds * 1000));
+        Long timeSeconds = getLong(cols, "time");
+        if (timeSeconds != null) {
+            q.setRegularMarketTime(new Date(timeSeconds * 1000));
+        } else {
+            q.setRegularMarketTime(new Date());
+        }
 
-        long vol10d = getLong(cols, "average_volume_10d_calc", 0L);
-        long vol90d = getLong(cols, "average_volume_90d_calc", 0L);
-        q.setAverageDailyVolume10Day(vol10d);
-        q.setAverageDailyVolume3Month(vol90d);
+        q.setAverageDailyVolume10Day(getLong(cols, "average_volume_10d_calc"));
+        q.setAverageDailyVolume3Month(getLong(cols, "average_volume_90d_calc"));
 
-        double sma200 = getDouble(cols, "SMA200", 0.0);
-        q.setTwoHundredDayAverage(sma200);
-        q.setTwoHundredDayAverageChange(sma200 > 0 ? close - sma200 : 0.0);
-        q.setTwoHundredDayAverageChangePercent(sma200 > 0 ? (close - sma200) / sma200 : 0.0);
+        q.setTwoHundredDayAverage(getDouble(cols, "SMA200"));
+        q.setFiftyTwoWeekHigh(getDouble(cols, "price_52_week_high"));
+        q.setFiftyTwoWeekLow(getDouble(cols, "price_52_week_low"));
+        q.setMarketCap(getLong(cols, "market_cap_basic"));
 
-        double high52 = getDouble(cols, "price_52_week_high", high);
-        double low52 = getDouble(cols, "price_52_week_low", low);
-        q.setFiftyTwoWeekHigh(high52);
-        q.setFiftyTwoWeekLow(low52);
-        q.setFiftyTwoWeekRange(low52 + " - " + high52);
-        q.setFiftyTwoWeekHighChange(high52 > 0 ? close - high52 : 0.0);
-        q.setFiftyTwoWeekHighChangePercent(high52 > 0 ? (close - high52) / high52 : 0.0);
-        q.setFiftyTwoWeekLowChange(low52 > 0 ? close - low52 : 0.0);
+        Double divYield = getDouble(cols, "dividends_yield_current");
+        if (divYield == null || divYield == 0.0) {
+            divYield = getDouble(cols, "dividends_yield");
+        }
+        Double divRate = getDouble(cols, "dps_common_stock_prim_issue_fy");
 
-        q.setMarketCap(getLong(cols, "market_cap_basic", 0L));
-
-        double divYield = getDouble(cols, "dividends_yield", 0.0);
         q.setDividendYield(divYield);
         q.setTrailingAnnualDividendYield(divYield);
+        q.setDividendRate(divRate);
+        q.setTrailingAnnualDividendRate(divRate);
 
-        return q;
+        return QuoteEnricher.enrich(q);
     }
 
     private String normalizeSymbol(String symbol) {
@@ -245,13 +242,25 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
         return (node != null && !node.isNull()) ? node.asText() : defaultVal;
     }
 
-    private double getDouble(Map<String, JsonNode> cols, String key, double defaultVal) {
+    private Double getDouble(Map<String, JsonNode> cols, String key) {
         JsonNode node = cols.get(key);
-        return (node != null && !node.isNull() && node.isNumber()) ? node.asDouble() : defaultVal;
+        if (node == null || node.isNull()) return null;
+        if (node.isNumber()) return node.asDouble();
+        try {
+            return Double.parseDouble(node.asText());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
-    private long getLong(Map<String, JsonNode> cols, String key, long defaultVal) {
+    private Long getLong(Map<String, JsonNode> cols, String key) {
         JsonNode node = cols.get(key);
-        return (node != null && !node.isNull() && node.isNumber()) ? node.asLong() : defaultVal;
+        if (node == null || node.isNull()) return null;
+        if (node.isNumber()) return node.asLong();
+        try {
+            return Long.parseLong(node.asText());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 }

@@ -2,6 +2,7 @@ package dev.jaoow.cotatrack.api.provider.orchestrator;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderResult;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.provider.impl.BrapiQuoteProvider;
@@ -107,6 +108,21 @@ public class ProviderOrchestrator {
     }
 
     /**
+     * Fetches a single quote with automated fallback across providers.
+     */
+    public ProviderResult<Quote> fetchQuote(String symbol) {
+        ProviderResult<Map<String, Quote>> multi = fetchQuotes(Collections.singletonList(symbol));
+        Quote q = multi.getData() != null ? findQuoteInMap(multi.getData(), symbol) : null;
+        return ProviderResult.<Quote>builder()
+                .data(q)
+                .providerName(multi.getProviderName())
+                .fromCache(multi.isFromCache())
+                .stale(multi.isStale())
+                .executionTimeMs(multi.getExecutionTimeMs())
+                .build();
+    }
+
+    /**
      * Fetches quotes for multiple symbols with automated fallback across providers.
      */
     public ProviderResult<Map<String, Quote>> fetchQuotes(List<String> symbols) {
@@ -193,6 +209,8 @@ public class ProviderOrchestrator {
                 }
             }
         }
+
+        accumulatedQuotes.values().forEach(QuoteEnricher::enrich);
 
         long elapsedMs = System.currentTimeMillis() - startTime;
         String providerLabel = hadFallback ? lastServingProvider + " (fallback)" : lastServingProvider;
