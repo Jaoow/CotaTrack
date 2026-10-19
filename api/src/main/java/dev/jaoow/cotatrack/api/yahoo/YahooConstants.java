@@ -14,4 +14,9 @@ public class YahooConstants {
     public static final String YAHOO_CRUMB = System.getProperty("yahoofinance.crumb", "");
     public static final String YAHOO_COOKIE = System.getProperty("yahoofinance.cookie", "");
 
+    public static final String USER_AGENT = System.getProperty(
+            "cotatrack.http.useragent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    );
+
 }

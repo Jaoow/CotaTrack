@@ -27,7 +27,7 @@ CotaTrack é uma API RESTful construída em Java com Spring Boot, projetada para
    cd CotaTrack
    ```
 
-2. Compile o projeto usando Maven:
+2. Compile o projeto a partir da raiz do repositório. O perfil `with-rest` inclui os módulos `api` e `rest` na compilação e instala primeiro o POM pai e a API, que são dependências do módulo REST:
 
    ```bash
    mvn clean install -P with-rest
@@ -39,6 +39,16 @@ CotaTrack é uma API RESTful construída em Java com Spring Boot, projetada para
    cd rest
    mvn spring-boot:run
    ```
+
+> Execute o comando Maven da etapa 2 em `CotaTrack/`, e não dentro de `api/` ou `rest/`.
+> Se os módulos forem compilados separadamente, instale primeiro o projeto pai e a API:
+>
+> ```bash
+> mvn clean install
+> cd rest
+> mvn clean install
+> mvn spring-boot:run
+> ```
 
 ## 🚀 Como Usar
 
@@ -86,7 +96,7 @@ CotaTrack é uma API RESTful construída em Java com Spring Boot, projetada para
 
 ## 🛠️ Tecnologias Utilizadas
 
-- **Java 11**
+- **Java 17**
 - **Spring Boot**
 - **Maven**
 - **Lombok** para simplificação de código

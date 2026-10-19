@@ -3,6 +3,7 @@ package dev.jaoow.cotatrack.api.tradingview.field;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jaoow.cotatrack.api.util.Utils;
+import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -107,6 +108,7 @@ public class FieldFetcher {
     private static JsonNode fetchFromAPI(String urlStr) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(new URI(urlStr))
+                .header("User-Agent", YahooConstants.USER_AGENT)
                 .GET()
                 .build();
 

@@ -41,11 +41,21 @@ public class YahooCredentials {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(YahooConstants.COOKIE_SCRAPE_URL))
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
+                .header("User-Agent", YahooConstants.USER_AGENT)
                 .build();
 
         // Send the request, so the cookie jar is populated
-        httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        log.debug("Cookie scrape request returned HTTP status {}", response.statusCode());
+
+        // Check Set-Cookie headers first
+        for (String setCookie : response.headers().allValues("Set-Cookie")) {
+            if (setCookie.contains("A3=")) {
+                cookie = setCookie;
+                log.info("Set cookie from Set-Cookie header: {}", cookie);
+                return;
+            }
+        }
 
         // Get the cookie from the cookie jar
         CookieStore cookieJar = cookieManager.getCookieStore();
@@ -55,7 +65,7 @@ public class YahooCredentials {
             return;
         }
 
-        throw new IOException("Failed to set cookie from HTTP request.");
+        log.warn("Could not find A3 cookie from HTTP response (status {}).", response.statusCode());
     }
 
     /**
@@ -71,37 +81,71 @@ public class YahooCredentials {
             return;
         }
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(YahooConstants.CRUMB_SCRAPE_URL))
-                .header("Cookie", cookie)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
-                .build();
+                .header("User-Agent", YahooConstants.USER_AGENT);
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        String crumbResult = response.body().trim();
-
-        if (!crumbResult.isEmpty()) {
-            crumb = crumbResult;
-            log.info("Set crumb from HTTP request: {}", crumb);
-        } else {
-            log.warn("Failed to set crumb from HTTP request. Historical quote requests will most likely fail.");
+        if (cookie != null && !cookie.isEmpty()) {
+            requestBuilder.header("Cookie", cookie);
         }
+
+        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            String crumbResult = response.body().trim();
+            if (!crumbResult.isEmpty() && !crumbResult.contains("<html>")) {
+                crumb = crumbResult;
+                log.info("Set crumb from HTTP request: {}", crumb);
+                return;
+            }
+        }
+
+        log.warn("Failed to set crumb from HTTP request (status {}). Quote requests may fail or fall back.", response.statusCode());
     }
 
     /**
-     * Get the crumb and cookie from Yahoo Finance.
+     * Get the crumb and cookie from Yahoo Finance with retry.
      * <p>
      * We need to get the crumb and cookie from Yahoo Finance to be able to make requests to the API.
      * The order of the requests is important, as the crumb request needs the cookie to be set.
      * </p>
      */
-    public static void fetch(){
-        try {
-            fetchCookie();
-            fetchCrumb();
-        } catch (InterruptedException | IOException e) {
-            log.error("Failed to refresh crumb and cookie", e);
+    public static synchronized void fetch() {
+        int maxRetries = 2;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                fetchCookie();
+                fetchCrumb();
+                if (crumb != null && !crumb.isEmpty()) {
+                    log.info("Successfully fetched Yahoo credentials on attempt {}", attempt);
+                    return;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while fetching Yahoo credentials");
+                return;
+            } catch (Exception e) {
+                log.warn("Attempt {} to refresh crumb/cookie failed: {}", attempt, e.getMessage());
+            }
+
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
+        log.warn("Could not obtain a fresh Yahoo crumb after retries. Proceeding without fresh credentials.");
+    }
+
+    /**
+     * Forces credential reset and refresh.
+     */
+    public static synchronized void refresh() {
+        crumb = "";
+        cookie = "";
+        cookieManager.getCookieStore().removeAll();
+        fetch();
     }
 
     /**
@@ -111,10 +155,10 @@ public class YahooCredentials {
      */
     public static synchronized String getCrumb() {
         if (crumb == null || crumb.isEmpty()) {
-            log.warn("Crumb is empty. Trying to refresh.");
+            log.info("Crumb is empty. Trying to refresh.");
             fetch();
         }
-        return crumb;
+        return crumb != null ? crumb : "";
     }
 
     /**
@@ -124,9 +168,9 @@ public class YahooCredentials {
      */
     public static synchronized String getCookie() {
         if (cookie == null || cookie.isEmpty()) {
-            log.warn("Cookie is empty. Trying to refresh.");
+            log.info("Cookie is empty. Trying to refresh.");
             fetch();
         }
-        return cookie;
+        return cookie != null ? cookie : "";
     }
 }

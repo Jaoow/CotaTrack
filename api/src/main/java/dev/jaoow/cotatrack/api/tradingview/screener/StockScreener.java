@@ -9,6 +9,7 @@ import dev.jaoow.cotatrack.api.tradingview.field.StockField;
 import dev.jaoow.cotatrack.api.tradingview.field.enums.Market;
 import dev.jaoow.cotatrack.api.tradingview.field.enums.Type;
 import dev.jaoow.cotatrack.api.tradingview.filter.Filter;
+import dev.jaoow.cotatrack.api.yahoo.YahooConstants;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -199,6 +200,7 @@ public class StockScreener {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(new URI(url))
+                .header("User-Agent", YahooConstants.USER_AGENT)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payloadString))
                 .build();

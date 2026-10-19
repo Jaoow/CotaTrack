@@ -73,25 +73,41 @@ public abstract class QuoteRequest<T> {
      * @throws InterruptedException if the request is interrupted
      */
     private JsonNode loadFromYahoo(String symbols) throws IOException, InterruptedException {
+        return loadFromYahooWithRetry(symbols, true);
+    }
+
+    private JsonNode loadFromYahooWithRetry(String symbols, boolean allowRetry) throws IOException, InterruptedException {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("symbols", symbols);
-        params.put("crumb", YahooCredentials.getCrumb());
+
+        String crumb = YahooCredentials.getCrumb();
+        if (crumb != null && !crumb.isEmpty()) {
+            params.put("crumb", crumb);
+        }
 
         String url = YahooConstants.QUOTES_QUERY2V7_BASE_URL + "?" + Utils.buildUrlParameters(params);
 
         log.info("Sending request: {}", url);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Cookie", YahooCredentials.getCookie())
-                .header("Accept", "application/json")
-                .build();
+                .header("User-Agent", YahooConstants.USER_AGENT)
+                .header("Accept", "application/json");
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        String cookie = YahooCredentials.getCookie();
+        if (cookie != null && !cookie.isEmpty()) {
+            requestBuilder.header("Cookie", cookie);
+        }
+
+        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
             log.info("Parsing JSON response: {}", response.body());
             return objectMapper.readTree(response.body());
+        } else if ((response.statusCode() == 401 || response.statusCode() == 403) && allowRetry) {
+            log.warn("Yahoo returned HTTP {}. Refreshing credentials and retrying once...", response.statusCode());
+            YahooCredentials.refresh();
+            return loadFromYahooWithRetry(symbols, false);
         } else {
             throw new IOException("Failed to fetch data: HTTP status code " + response.statusCode());
         }

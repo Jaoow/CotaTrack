@@ -94,6 +94,10 @@ public class HistoricalQuotesRequest {
     }
 
     private JsonNode fetchData() throws IOException, InterruptedException {
+        return fetchDataWithRetry(true);
+    }
+
+    private JsonNode fetchDataWithRetry(boolean allowRetry) throws IOException, InterruptedException {
         if (this.from.isAfter(this.to)) {
             log.error("Unable to retrieve historical quotes. From-date should not be after to-date. From: {}, to: {}", this.from, this.to);
             return null;
@@ -104,23 +108,35 @@ public class HistoricalQuotesRequest {
         params.put("period2", String.valueOf(this.to.atStartOfDay(ZoneId.systemDefault()).toEpochSecond()));
         params.put("interval", this.interval.getTag());
         params.put("range", this.range.getTag());
-        params.put("crumb", YahooCredentials.getCrumb());
+
+        String crumb = YahooCredentials.getCrumb();
+        if (crumb != null && !crumb.isEmpty()) {
+            params.put("crumb", crumb);
+        }
 
         String url = YahooConstants.HISTQUOTES_QUERY2V8_BASE_URL + URLEncoder.encode(this.symbol, StandardCharsets.UTF_8) + "?" + Utils.buildUrlParameters(params);
 
         log.info("Sending request: {}", url);
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Cookie", YahooCredentials.getCookie())
-                .header("Accept", "application/json")
-                .build();
+                .header("User-Agent", YahooConstants.USER_AGENT)
+                .header("Accept", "application/json");
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        String cookie = YahooCredentials.getCookie();
+        if (cookie != null && !cookie.isEmpty()) {
+            reqBuilder.header("Cookie", cookie);
+        }
+
+        HttpResponse<String> response = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
             log.info("Parsing JSON response: {}", response.body());
             return objectMapper.readTree(response.body());
+        } else if ((response.statusCode() == 401 || response.statusCode() == 403) && allowRetry) {
+            log.warn("Yahoo historical returned HTTP {}. Refreshing credentials and retrying once...", response.statusCode());
+            YahooCredentials.refresh();
+            return fetchDataWithRetry(false);
         } else {
             throw new IOException("Failed to fetch data: HTTP status code " + response.statusCode());
         }
