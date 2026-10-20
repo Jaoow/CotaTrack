@@ -1,0 +1,17 @@
+meta {
+  name: Unknown symbol
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/quote/NOTAREALSYMBOL999
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+  res.body.error: eq true
+  res.body.message: contains "No quotes found"
+}

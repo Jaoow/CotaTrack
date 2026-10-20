@@ -1,0 +1,17 @@
+meta {
+  name: Multiple symbols
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4,VALE3,ITUB4
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results: isNotEmpty
+}

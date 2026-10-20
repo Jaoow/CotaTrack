@@ -1,0 +1,18 @@
+meta {
+  name: Diagnostics alias
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/diagnostics
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: isString
+  res.body.providers: isArray
+  res.body.cacheStats: isObject
+}

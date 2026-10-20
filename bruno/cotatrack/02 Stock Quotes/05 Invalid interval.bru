@@ -1,0 +1,21 @@
+meta {
+  name: Invalid interval
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4
+  body: none
+  auth: none
+}
+
+params:query {
+  interval: invalid
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq true
+  res.body.message: contains "Invalid interval"
+}

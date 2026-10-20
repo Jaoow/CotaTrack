@@ -1,0 +1,19 @@
+meta {
+  name: Current quote
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results[0].symbol: isString
+  res.body.elapsedTime: isString
+  res.body.requestedAt: isString
+}

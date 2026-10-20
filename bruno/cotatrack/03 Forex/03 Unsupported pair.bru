@@ -1,0 +1,17 @@
+meta {
+  name: Unsupported pair
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/forex/XYZ/ABC
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq true
+  res.body.message: isString
+}

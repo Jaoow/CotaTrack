@@ -1,0 +1,21 @@
+meta {
+  name: Invalid range
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4
+  body: none
+  auth: none
+}
+
+params:query {
+  range: invalid
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq true
+  res.body.message: contains "Invalid range"
+}

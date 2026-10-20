@@ -1,0 +1,25 @@
+meta {
+  name: Pagination descending
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/quote/list
+  body: none
+  auth: none
+}
+
+params:query {
+  sortBy: close
+  sortOrder: desc
+  limit: 5
+  page: 1
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.itemsPerPage: eq 5
+  res.body.currentPage: eq 2
+}

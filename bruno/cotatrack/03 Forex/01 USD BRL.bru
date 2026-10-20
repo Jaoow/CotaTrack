@@ -1,0 +1,18 @@
+meta {
+  name: USD BRL
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/forex/USD/BRL
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results: isNotEmpty
+  res.body.results[0].symbol: isString
+}

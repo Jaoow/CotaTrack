@@ -1,0 +1,17 @@
+meta {
+  name: Multiple pairs
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/forex/USD/BRL,EUR/BRL
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results: isNotEmpty
+}

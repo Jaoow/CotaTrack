@@ -1,0 +1,20 @@
+meta {
+  name: Default list
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/quote/list
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.currentPage: eq 1
+  res.body.itemsPerPage: eq 20
+  res.body.totalCount: isNumber
+  res.body.hasNextPage: isBoolean
+}

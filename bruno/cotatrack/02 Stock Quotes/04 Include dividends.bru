@@ -1,0 +1,21 @@
+meta {
+  name: Include dividends
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4
+  body: none
+  auth: none
+}
+
+params:query {
+  dividends: true
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results[0].dividends: isObject
+}

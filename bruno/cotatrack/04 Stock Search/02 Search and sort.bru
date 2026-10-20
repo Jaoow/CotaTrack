@@ -1,0 +1,26 @@
+meta {
+  name: Search and sort
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/quote/list
+  body: none
+  auth: none
+}
+
+params:query {
+  search: Petrobras
+  type: stock,fund
+  sortBy: name
+  sortOrder: asc
+  limit: 10
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.itemsPerPage: eq 10
+  res.body.currentPage: eq 1
+}

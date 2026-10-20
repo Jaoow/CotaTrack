@@ -1,0 +1,21 @@
+meta {
+  name: Invalid sort field
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/quote/list
+  body: none
+  auth: none
+}
+
+params:query {
+  sortBy: notAField
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq true
+  res.body.message: contains "Invalid sort field"
+}

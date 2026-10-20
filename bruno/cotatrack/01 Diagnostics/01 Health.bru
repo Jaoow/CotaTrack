@@ -1,0 +1,19 @@
+meta {
+  name: Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: isString
+  res.body.timestamp: isString
+  res.body.providers: isArray
+  res.body.cacheStats: isObject
+}

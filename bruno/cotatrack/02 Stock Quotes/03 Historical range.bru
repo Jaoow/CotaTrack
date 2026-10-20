@@ -1,0 +1,24 @@
+meta {
+  name: Historical range
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/quote/PETR4
+  body: none
+  auth: none
+}
+
+params:query {
+  range: 1mo
+  interval: 1d
+  from: 2026-01-01
+  to: 2026-01-31
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.results[0].historicalQuotes: isArray
+}
