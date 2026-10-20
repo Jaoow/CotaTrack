@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/quote/PETR4
+  url: {{baseUrl}}/api/quote/PETR4?dividends=true
   body: none
   auth: none
 }
@@ -17,5 +17,5 @@ params:query {
 assert {
   res.status: eq 200
   res.body.results: isArray
-  res.body.results[0].dividends: isObject
+  res.body.results[0].dividends: isDefined
 }

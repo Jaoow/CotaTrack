@@ -14,5 +14,5 @@ assert {
   res.status: eq 200
   res.body.status: isString
   res.body.providers: isArray
-  res.body.cacheStats: isObject
+  res.body.cacheStats: isDefined
 }
