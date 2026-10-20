@@ -355,7 +355,7 @@ public class QuoteEnricher {
         String combined = (assetIssued + " " + isinCode).toUpperCase();
         if (expectedType.equals("ON") && (combined.contains("OR") || combined.contains("ON") || combined.endsWith("3"))) return true;
         if (expectedType.equals("PN") && (combined.contains("PR") || combined.contains("PN") || combined.endsWith("4"))) return true;
-        if (expectedType.equals("UNIT") && (combined.contains("UNT") || combined.contains("CD") || combined.endsWith("11"))) return true;
+        if (expectedType.equals("UNIT") && (combined.contains("UNT") || combined.contains("CD") || combined.contains("CTF") || combined.endsWith("11"))) return true;
         return combined.isEmpty();
     }
 }

@@ -43,17 +43,23 @@ public class DividendsRequest {
     private static DividendsData fetchDividendsData(String symbol) {
         try {
             JsonNode companyDataNode = DividendsFetcher.fetchDividendsData(symbol);
+            if (companyDataNode == null || companyDataNode.isNull()) {
+                return null;
+            }
 
             // Check if companyDataNode is a text node and parse it accordingly
             if (companyDataNode.isTextual()) {
                 String jsonString = companyDataNode.asText();
-                companyDataNode = objectMapper.readTree(jsonString).get(0); // The response is an array with a single
-                                                                            // object
+                companyDataNode = objectMapper.readTree(jsonString);
+            }
+
+            if (companyDataNode.isArray() && !companyDataNode.isEmpty()) {
+                companyDataNode = companyDataNode.get(0);
             }
 
             return objectMapper.treeToValue(companyDataNode, DividendsData.class);
         } catch (InterruptedException | IOException e) {
-            log.error("Failed to fetch company data", e);
+            log.error("Failed to fetch company data for {}", symbol, e);
             return null;
         }
     }

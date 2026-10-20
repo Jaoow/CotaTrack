@@ -1,5 +1,6 @@
 package dev.jaoow.cotatrack.api.requests.quotes.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -43,6 +44,7 @@ public class FxQuote {
         this.price = regularMarketPrice;
     }
 
+    @JsonIgnore
     public BigDecimal getRegularMarketPrice() {
         return getPrice();
     }
