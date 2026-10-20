@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import dev.jaoow.cotatrack.api.classification.AssetClassification;
+import dev.jaoow.cotatrack.api.classification.AssetClassifier;
 import dev.jaoow.cotatrack.api.provider.enricher.QuoteEnricher;
 import dev.jaoow.cotatrack.api.provider.ProviderException;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
@@ -39,7 +41,7 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
             "average_volume_30d_calc", "average_volume_10d_calc", "average_volume_90d_calc",
             "price_52_week_high", "price_52_week_low", "SMA200", "logoid",
             "dividends_yield", "dividends_yield_current", "dps_common_stock_prim_issue_fy",
-            "dividend_amount_recent", "time");
+            "dividend_amount_recent", "time", "sector", "industry");
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -174,6 +176,20 @@ public class TradingViewQuoteProvider implements StockQuoteProvider {
         String desc = getText(cols, "description", name);
         q.setShortName(name);
         q.setLongName(desc);
+
+        String rawType = getText(cols, "type", null);
+        String rawSubType = getText(cols, "subtype", null);
+        String sector = getText(cols, "sector", null);
+        String industry = getText(cols, "industry", null);
+
+        AssetClassification classification = AssetClassifier.classify(
+                symbol, rawType, rawSubType, sector, industry, desc);
+
+        q.setType(classification.getType());
+        q.setSubType(classification.getSubType());
+        q.setCategory(classification.getCategoryName());
+        q.setSector(classification.getSector());
+        q.setIndustry(classification.getIndustry());
 
         String logoId = getText(cols, "logoid", null);
         if (logoId != null && !logoId.isBlank()) {

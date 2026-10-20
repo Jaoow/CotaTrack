@@ -18,6 +18,7 @@ public enum StockField implements FieldKey {
     NAME("name"),
     DESCRIPTION("description"),
     SECTOR("sector"),
+    INDUSTRY("industry"),
     TYPE("type"),
     SUBTYPE("subtype"),
     MARKET_CAPITALIZATION("market_cap_basic"),

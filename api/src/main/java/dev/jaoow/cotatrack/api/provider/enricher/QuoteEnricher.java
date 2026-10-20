@@ -1,5 +1,7 @@
 package dev.jaoow.cotatrack.api.provider.enricher;
 
+import dev.jaoow.cotatrack.api.classification.AssetClassification;
+import dev.jaoow.cotatrack.api.classification.AssetClassifier;
 import dev.jaoow.cotatrack.api.requests.dividends.model.CashDividend;
 import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -47,6 +49,23 @@ public class QuoteEnricher {
     public static Quote enrich(Quote quote) {
         if (quote == null) {
             return null;
+        }
+
+        // Ensure asset classification is populated
+        if (quote.getCategory() == null) {
+            AssetClassification classification = AssetClassifier.classify(
+                    quote.getSymbol(),
+                    quote.getType(),
+                    quote.getSubType(),
+                    quote.getSector(),
+                    quote.getIndustry(),
+                    quote.getLongName() != null ? quote.getLongName() : quote.getShortName());
+
+            quote.setCategory(classification.getCategoryName());
+            if (quote.getType() == null) quote.setType(classification.getType());
+            if (quote.getSubType() == null) quote.setSubType(classification.getSubType());
+            if (quote.getSector() == null) quote.setSector(classification.getSector());
+            if (quote.getIndustry() == null) quote.setIndustry(classification.getIndustry());
         }
 
         Double price = quote.getRegularMarketPrice();

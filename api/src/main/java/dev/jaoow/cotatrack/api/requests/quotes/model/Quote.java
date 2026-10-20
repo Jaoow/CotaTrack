@@ -39,6 +39,12 @@ public class Quote {
 
     private String logoUrl;
 
+    private String type;
+    private String subType;
+    private String category;
+    private String sector;
+    private String industry;
+
     private Double regularMarketChange;
     private Double regularMarketChangePercent;
     private Date regularMarketTime;

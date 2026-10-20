@@ -50,6 +50,10 @@ CotaTrack é uma API RESTful construída em Java com Spring Boot, projetada para
 > mvn spring-boot:run
 > ```
 
+### Coleção Bruno
+
+Uma coleção Bruno com cenários de sucesso, filtros, paginação e respostas de erro está disponível em `bruno/cotatrack`. Importe essa pasta no Bruno, selecione o ambiente `local` e execute a aplicação em `http://localhost:8080`.
+
 ## 🚀 Como Usar
 
 ### 🔗 Endpoints

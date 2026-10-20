@@ -192,6 +192,16 @@ public class BrapiQuoteProvider implements StockQuoteProvider {
         q.setShortName(item.path("shortName").asText(symbol));
         q.setLongName(item.path("longName").asText(q.getShortName()));
 
+        if (item.hasNonNull("sector")) {
+            q.setSector(item.get("sector").asText());
+        }
+        if (item.hasNonNull("type")) {
+            q.setType(item.get("type").asText());
+        }
+        if (item.hasNonNull("subType")) {
+            q.setSubType(item.get("subType").asText());
+        }
+
         String logoUrl = item.path("logourl").asText(null);
         if (logoUrl != null && !logoUrl.isBlank()) {
             q.setLogoUrl(logoUrl);

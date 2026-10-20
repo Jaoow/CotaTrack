@@ -60,7 +60,9 @@ class TradingViewQuoteProviderTest {
                     6.5,
                     2.50,
                     0.80,
-                    1792444000
+                    1792444000,
+                    "Energy Minerals",
+                    "Integrated Oil"
                   ]
                 }
               ]
@@ -135,6 +137,9 @@ class TradingViewQuoteProviderTest {
         assertEquals(28.10, q.getFiftyTwoWeekLow());
         assertEquals("https://s3-symbol-logo.tradingview.com/petrobras--big.svg", q.getLogoUrl());
         assertEquals(6.5, q.getDividendYield());
+        assertEquals("EQUITIES", q.getCategory());
+        assertEquals("Energy Minerals", q.getSector());
+        assertEquals("Integrated Oil", q.getIndustry());
     }
 
     @Test
