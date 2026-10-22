@@ -9,11 +9,37 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
+import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
+import dev.jaoow.cotatrack.api.requests.quotes.model.StockInstrument;
 
 /**
  * Interface representing a market data provider for stock quotes and historical candles.
  */
 public interface StockQuoteProvider {
+
+    default AssetMarket getMarket() {
+        return AssetMarket.B3;
+    }
+
+    default boolean supportsDividends() {
+        return false;
+    }
+
+    default DividendsData fetchDividends(String symbol) throws Exception {
+        throw new UnsupportedOperationException("Dividends are not supported by " + getName());
+    }
+
+    default boolean supportsCatalog() {
+        return false;
+    }
+
+    default List<StockInstrument> fetchCatalog() throws Exception {
+        throw new UnsupportedOperationException("Catalog is not supported by " + getName());
+    }
+
+    default void validateHistorical(LocalDate from, LocalDate to, Interval interval, Range range) {
+    }
 
     /**
      * Unique provider identifier (e.g., "TRADING_VIEW", "YAHOO_CHART", "BRAPI").

@@ -2,6 +2,8 @@ package dev.jaoow.cotatrack.api.requests.quotes.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import dev.jaoow.cotatrack.api.provider.QuoteMetadata;
 import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
 import dev.jaoow.cotatrack.api.requests.dividends.DividendsRequest;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -18,7 +20,7 @@ import java.util.List;
  * Represents a stock quote with market data, historical and dividends information.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -27,6 +29,9 @@ import java.util.List;
         value = {"exchange", "fullExchangeName"}
 )
 public class Quote {
+
+    @JsonIgnore
+    private QuoteMetadata metadata;
 
     private String symbol;
     private String currency;
@@ -88,6 +93,7 @@ public class Quote {
      * @param historicalRequest the historical quotes request
      */
     public void fetchHistoricalQuotes(HistoricalQuotesRequest historicalRequest) {
+        requireLegacyMarket();
         if (this.historicalQuotes != null) {
             return;
         }
@@ -100,11 +106,18 @@ public class Quote {
      * If the dividends data is not available yet, it will be requested from B3.
      */
     public void fetchDividendsData() {
+        requireLegacyMarket();
         if (this.dividends != null) {
             return;
         }
 
         DividendsRequest dividendsRequest = new DividendsRequest(this.symbol);
         this.setDividends(dividendsRequest.getResult());
+    }
+
+    private void requireLegacyMarket() {
+        if (metadata != null && "US".equals(metadata.getMarket())) {
+            throw new IllegalStateException("Use StocksQuery to fetch US history and corporate actions.");
+        }
     }
 }

@@ -2,6 +2,7 @@ package dev.jaoow.cotatrack.api.provider.enricher;
 
 import dev.jaoow.cotatrack.api.classification.AssetClassification;
 import dev.jaoow.cotatrack.api.classification.AssetClassifier;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
 import dev.jaoow.cotatrack.api.requests.dividends.model.CashDividend;
 import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
@@ -47,12 +48,21 @@ public class QuoteEnricher {
      * @return the enriched quote
      */
     public static Quote enrich(Quote quote) {
+        return enrich(quote, AssetMarket.B3);
+    }
+
+    public static Quote enrich(Quote quote, AssetMarket market) {
         if (quote == null) {
             return null;
         }
 
         // Ensure asset classification is populated
-        if (quote.getCategory() == null) {
+        if (market == AssetMarket.US && quote.getCategory() == null) {
+            quote.setCategory("EQUITIES");
+            quote.setType("stock");
+            if (quote.getSubType() == null) quote.setSubType("common");
+        }
+        if (market == AssetMarket.B3 && quote.getCategory() == null) {
             AssetClassification classification = AssetClassifier.classify(
                     quote.getSymbol(),
                     quote.getType(),
@@ -75,11 +85,11 @@ public class QuoteEnricher {
         Double dayLow = quote.getRegularMarketDayLow();
 
         // 1. Day High & Low fallbacks to price if completely absent
-        if (dayHigh == null && price != null) {
+        if (market == AssetMarket.B3 && dayHigh == null && price != null) {
             quote.setRegularMarketDayHigh(price);
             dayHigh = price;
         }
-        if (dayLow == null && price != null) {
+        if (market == AssetMarket.B3 && dayLow == null && price != null) {
             quote.setRegularMarketDayLow(price);
             dayLow = price;
         }
@@ -141,16 +151,16 @@ public class QuoteEnricher {
             quote.setDividendYield(divYield);
         }
 
-        if (quote.getTrailingAnnualDividendRate() == null && divRate != null) {
+        if (market == AssetMarket.B3 && quote.getTrailingAnnualDividendRate() == null && divRate != null) {
             quote.setTrailingAnnualDividendRate(divRate);
         }
-        if (quote.getTrailingAnnualDividendYield() == null && divYield != null) {
+        if (market == AssetMarket.B3 && quote.getTrailingAnnualDividendYield() == null && divYield != null) {
             quote.setTrailingAnnualDividendYield(divYield);
         }
-        if (quote.getDividendRate() == null && quote.getTrailingAnnualDividendRate() != null) {
+        if (market == AssetMarket.B3 && quote.getDividendRate() == null && quote.getTrailingAnnualDividendRate() != null) {
             quote.setDividendRate(quote.getTrailingAnnualDividendRate());
         }
-        if (quote.getDividendYield() == null && quote.getTrailingAnnualDividendYield() != null) {
+        if (market == AssetMarket.B3 && quote.getDividendYield() == null && quote.getTrailingAnnualDividendYield() != null) {
             quote.setDividendYield(quote.getTrailingAnnualDividendYield());
         }
 
@@ -166,6 +176,10 @@ public class QuoteEnricher {
      * @return the enriched quote
      */
     public static Quote enrichFromHistory(Quote quote, List<HistoricalQuote> candles) {
+        return enrichFromHistory(quote, candles, AssetMarket.B3);
+    }
+
+    public static Quote enrichFromHistory(Quote quote, List<HistoricalQuote> candles, AssetMarket market) {
         if (quote == null || candles == null || candles.isEmpty()) {
             return quote;
         }
@@ -182,7 +196,7 @@ public class QuoteEnricher {
         int totalCandles = validCandles.size();
 
         // 1. SMA200 (last up to 200 daily closes)
-        if (quote.getTwoHundredDayAverage() == null) {
+        if (quote.getTwoHundredDayAverage() == null && (market == AssetMarket.B3 || totalCandles >= 200)) {
             int smaWindow = Math.min(totalCandles, 200);
             List<HistoricalQuote> smaSlice = validCandles.subList(totalCandles - smaWindow, totalCandles);
             BigDecimal sumCloses = smaSlice.stream()
@@ -193,7 +207,9 @@ public class QuoteEnricher {
         }
 
         // 2. 10-Day Volume Average
-        if (quote.getAverageDailyVolume10Day() == null) {
+        if (quote.getAverageDailyVolume10Day() == null && (market == AssetMarket.B3 || totalCandles >= 10)
+                && (market == AssetMarket.B3 || validCandles.subList(totalCandles - 10, totalCandles)
+                .stream().allMatch(c -> c.getVolume() != null))) {
             int vol10Window = Math.min(totalCandles, 10);
             List<HistoricalQuote> vol10Slice = validCandles.subList(totalCandles - vol10Window, totalCandles);
             long sumVol10 = vol10Slice.stream()
@@ -203,7 +219,9 @@ public class QuoteEnricher {
         }
 
         // 3. 3-Month Volume Average (~63 trading sessions)
-        if (quote.getAverageDailyVolume3Month() == null) {
+        if (quote.getAverageDailyVolume3Month() == null && (market == AssetMarket.B3 || totalCandles >= 63)
+                && (market == AssetMarket.B3 || validCandles.subList(totalCandles - 63, totalCandles)
+                .stream().allMatch(c -> c.getVolume() != null))) {
             int vol90Window = Math.min(totalCandles, 63);
             List<HistoricalQuote> vol90Slice = validCandles.subList(totalCandles - vol90Window, totalCandles);
             long sumVol90 = vol90Slice.stream()
@@ -216,7 +234,7 @@ public class QuoteEnricher {
         int yearWindow = Math.min(totalCandles, 252);
         List<HistoricalQuote> yearSlice = validCandles.subList(totalCandles - yearWindow, totalCandles);
 
-        if (quote.getFiftyTwoWeekHigh() == null) {
+        if (quote.getFiftyTwoWeekHigh() == null && (market == AssetMarket.B3 || totalCandles >= 252)) {
             double maxHigh = yearSlice.stream()
                     .map(c -> c.getHigh() != null ? c.getHigh() : c.getClose())
                     .mapToDouble(BigDecimal::doubleValue)
@@ -227,7 +245,7 @@ public class QuoteEnricher {
             }
         }
 
-        if (quote.getFiftyTwoWeekLow() == null) {
+        if (quote.getFiftyTwoWeekLow() == null && (market == AssetMarket.B3 || totalCandles >= 252)) {
             double minLow = yearSlice.stream()
                     .map(c -> (c.getLow() != null && c.getLow().compareTo(BigDecimal.ZERO) > 0) ? c.getLow() : c.getClose())
                     .mapToDouble(BigDecimal::doubleValue)
@@ -240,7 +258,7 @@ public class QuoteEnricher {
         }
 
         // Re-run standard derivations for the newly calculated fields
-        return enrich(quote);
+        return enrich(quote, market);
     }
 
     /**

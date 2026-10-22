@@ -6,6 +6,8 @@ import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
 import dev.jaoow.cotatrack.api.requests.quotes.model.FxQuote;
 import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
+import dev.jaoow.cotatrack.api.requests.quotes.model.StockInstrument;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -39,6 +41,8 @@ public class CotaTrackCacheManager {
     private final Cache<String, DividendsData> dividendsCache;
     private final Cache<String, String> logoCache;
     private final Cache<String, FxQuote> fxQuoteCache;
+    private final Cache<String, List<StockInstrument>> stockCatalogCache;
+    private final Cache<String, Quote> stockFundamentalsCache;
 
     public CotaTrackCacheManager() {
         this(CacheConfig.fromSystemProperties());
@@ -79,6 +83,17 @@ public class CotaTrackCacheManager {
         this.fxQuoteCache = Caffeine.newBuilder()
                 .expireAfterWrite(this.config.getQuoteIntradayTtl())
                 .maximumSize(500)
+                .recordStats()
+                .build();
+
+        this.stockCatalogCache = Caffeine.newBuilder()
+                .expireAfterWrite(this.config.getLogoTtl())
+                .maximumSize(10)
+                .recordStats()
+                .build();
+        this.stockFundamentalsCache = Caffeine.newBuilder()
+                .expireAfterWrite(this.config.getHistoryDailyTtl())
+                .maximumSize(this.config.getMaxQuotesCacheSize())
                 .recordStats()
                 .build();
 
@@ -227,6 +242,28 @@ public class CotaTrackCacheManager {
         dividendsCache.invalidateAll();
         logoCache.invalidateAll();
         fxQuoteCache.invalidateAll();
+        stockCatalogCache.invalidateAll();
+        stockFundamentalsCache.invalidateAll();
+    }
+
+    public Quote getIntradayQuote(AssetMarket market, String symbol) {
+        return market == AssetMarket.B3 ? getIntradayQuote(symbol)
+                : intradayQuoteCache.getIfPresent(market.cacheKey(symbol));
+    }
+
+    public void putIntradayQuote(AssetMarket market, String symbol, Quote quote) {
+        if (market == AssetMarket.B3) {
+            putIntradayQuote(symbol, quote);
+        } else {
+            String key = market.cacheKey(symbol);
+            intradayQuoteCache.put(key, quote);
+            staleQuoteCache.put(key, quote);
+        }
+    }
+
+    public Quote getStaleQuote(AssetMarket market, String symbol) {
+        return market == AssetMarket.B3 ? getStaleQuote(symbol)
+                : staleQuoteCache.getIfPresent(market.cacheKey(symbol));
     }
 
     private String normalize(String s) {

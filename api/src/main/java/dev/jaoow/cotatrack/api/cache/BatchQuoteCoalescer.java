@@ -1,13 +1,19 @@
 package dev.jaoow.cotatrack.api.cache;
 
 import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
+import dev.jaoow.cotatrack.api.provider.ProviderResult;
+import dev.jaoow.cotatrack.api.provider.ProviderException;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
@@ -20,6 +26,34 @@ public class BatchQuoteCoalescer {
 
     private static final long DEFAULT_TIMEOUT_SECONDS = 10;
     private final ConcurrentMap<String, CompletableFuture<Quote>> inFlight = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, CompletableFuture<ProviderResult<Quote>>> marketInFlight = new ConcurrentHashMap<>();
+
+    public ProviderResult<Quote> coalesce(AssetMarket market, String symbol,
+                                          Supplier<ProviderResult<Quote>> fetcher) {
+        String key = market.cacheKey(symbol);
+        CompletableFuture<ProviderResult<Quote>> created = new CompletableFuture<>();
+        CompletableFuture<ProviderResult<Quote>> existing = marketInFlight.putIfAbsent(key, created);
+        if (existing == null) {
+            try {
+                ProviderResult<Quote> result = fetcher.get();
+                created.complete(result);
+                return result;
+            } catch (RuntimeException e) {
+                created.completeExceptionally(e);
+                throw e;
+            } finally {
+                marketInFlight.remove(key, created);
+            }
+        }
+        try {
+            return existing.get(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ProviderException("US", "Interrupted while awaiting quote", e);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new ProviderException("US", "Failed while awaiting quote", e);
+        }
+    }
 
     /**
      * Coalesces concurrent requests for symbols.
@@ -96,7 +130,7 @@ public class BatchQuoteCoalescer {
     }
 
     public int getInFlightCount() {
-        return inFlight.size();
+        return inFlight.size() + marketInFlight.size();
     }
 
     private Quote findQuote(Map<String, Quote> map, String normSymbol) {

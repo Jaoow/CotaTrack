@@ -12,6 +12,12 @@ import dev.jaoow.cotatrack.api.requests.historicalquotes.model.HistoricalQuote;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.Interval;
 import dev.jaoow.cotatrack.api.requests.historicalquotes.model.Range;
 import dev.jaoow.cotatrack.api.requests.quotes.model.Quote;
+import dev.jaoow.cotatrack.api.requests.quotes.model.StockInstrument;
+import dev.jaoow.cotatrack.api.requests.dividends.model.DividendsData;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
+import dev.jaoow.cotatrack.api.provider.ProviderException;
+import dev.jaoow.cotatrack.api.provider.QuoteMetadata;
+import dev.jaoow.cotatrack.api.provider.health.ProviderHealthTracker;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.ratelimiter.RateLimiter;
@@ -39,6 +45,8 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class ProviderOrchestrator {
 
+    @Getter
+    private final AssetMarket market;
     private final List<StockQuoteProvider> providers;
     private final Map<String, CircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
     private final Map<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
@@ -69,6 +77,15 @@ public class ProviderOrchestrator {
     public ProviderOrchestrator(List<StockQuoteProvider> providers,
                                 CotaTrackCacheManager cacheManager,
                                 BatchQuoteCoalescer batchQuoteCoalescer) {
+        this(AssetMarket.B3, providers, cacheManager, batchQuoteCoalescer);
+    }
+
+    public ProviderOrchestrator(AssetMarket market, List<StockQuoteProvider> providers,
+                                CotaTrackCacheManager cacheManager, BatchQuoteCoalescer batchQuoteCoalescer) {
+        this.market = Objects.requireNonNull(market);
+        if (providers.stream().anyMatch(provider -> provider.getMarket() != market)) {
+            throw new IllegalArgumentException("All providers must belong to " + market);
+        }
         this.providers = new ArrayList<>(providers);
         this.cacheManager = cacheManager != null ? cacheManager : CotaTrackCacheManager.getInstance();
         this.batchQuoteCoalescer = batchQuoteCoalescer != null ? batchQuoteCoalescer : new BatchQuoteCoalescer();
@@ -136,6 +153,9 @@ public class ProviderOrchestrator {
      * Fetches a single quote with caching, coalescing, and automated fallback.
      */
     public ProviderResult<Quote> fetchQuote(String symbol) {
+        if (market == AssetMarket.US) {
+            return fetchQuotes(List.of(symbol)).getItems().get(market.normalize(symbol));
+        }
         ProviderResult<Map<String, Quote>> multi = fetchQuotes(Collections.singletonList(symbol));
         Quote q = multi.getData() != null ? findQuoteInMap(multi.getData(), symbol) : null;
         return ProviderResult.<Quote>builder()
@@ -165,6 +185,9 @@ public class ProviderOrchestrator {
      * </ol>
      */
     public ProviderResult<Map<String, Quote>> fetchQuotes(List<String> symbols) {
+        if (market == AssetMarket.US) {
+            return fetchUsQuotes(symbols);
+        }
         long startTime = System.currentTimeMillis();
         if (symbols == null || symbols.isEmpty()) {
             return ProviderResult.of(Collections.emptyMap(), "NONE", 0);
@@ -353,6 +376,20 @@ public class ProviderOrchestrator {
      * Fetches historical quotes using the 6-12h historical cache with automated fallback across providers.
      */
     public ProviderResult<List<HistoricalQuote>> fetchHistorical(String symbol, LocalDate from, LocalDate to, Interval interval, Range range) {
+        if (market == AssetMarket.US) {
+            validateHistorical(from, to, interval, range);
+            LocalDate end = to == null ? LocalDate.now(java.time.ZoneId.of("America/New_York")) : to;
+            String key = market.cacheKey(symbol) + ":" + from + ":" + end + ":" + interval + ":" + range + ":raw:regular";
+            List<HistoricalQuote> cached = cacheManager.getHistorical(key);
+            if (cached != null) {
+                return ProviderResult.fromCache(cached, "CACHE", false, 0);
+            }
+            ProviderResult<List<HistoricalQuote>> result = fetchUsSupplement("history",
+                    StockQuoteProvider::supportsHistorical,
+                    provider -> provider.fetchHistorical(symbol, from, to, interval, range));
+            cacheManager.putHistorical(key, List.copyOf(result.getData()));
+            return result;
+        }
         long startTime = System.currentTimeMillis();
         if (symbol == null || symbol.isBlank()) {
             return ProviderResult.of(Collections.emptyList(), "NONE", 0);
@@ -420,5 +457,182 @@ public class ProviderOrchestrator {
 
     public Map<String, CircuitBreaker> getCircuitBreakers() {
         return Collections.unmodifiableMap(circuitBreakers);
+    }
+
+    public void validateHistorical(LocalDate from, LocalDate to, Interval interval, Range range) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("From-date must not be after to-date.");
+        }
+        if (range != null && (from != null || to != null)) {
+            throw new IllegalArgumentException("Use either range or from/to, not both.");
+        }
+        for (StockQuoteProvider provider : providers) {
+            if (provider.supportsHistorical()) {
+                provider.validateHistorical(from, to, interval, range);
+            }
+        }
+    }
+
+    public ProviderResult<DividendsData> fetchDividends(String symbol) {
+        requireUsMarket();
+        String key = market.cacheKey(symbol);
+        DividendsData cached = cacheManager.getDividendsCache().getIfPresent(key);
+        if (cached != null) {
+            return ProviderResult.fromCache(cached, "CACHE", false, 0);
+        }
+        ProviderResult<DividendsData> result = fetchUsSupplement("dividends",
+                StockQuoteProvider::supportsDividends, provider -> provider.fetchDividends(symbol));
+        cacheManager.getDividendsCache().put(key, result.getData());
+        return result;
+    }
+
+    public ProviderResult<List<StockInstrument>> fetchCatalog() {
+        requireUsMarket();
+        List<StockInstrument> cached = cacheManager.getStockCatalogCache().getIfPresent(market.name());
+        if (cached != null) {
+            return ProviderResult.fromCache(cached, "CACHE", false, 0);
+        }
+        ProviderResult<List<StockInstrument>> result = fetchUsSupplement("catalog",
+                StockQuoteProvider::supportsCatalog, StockQuoteProvider::fetchCatalog);
+        cacheManager.getStockCatalogCache().put(market.name(), List.copyOf(result.getData()));
+        return result;
+    }
+
+    private void requireUsMarket() {
+        if (market != AssetMarket.US) {
+            throw new IllegalStateException("This operation requires an explicit US market orchestrator.");
+        }
+    }
+
+    @FunctionalInterface
+    private interface ProviderCall<T> {
+        T execute(StockQuoteProvider provider) throws Exception;
+    }
+
+    private <T> T callUsProvider(StockQuoteProvider provider, ProviderCall<T> call) throws Exception {
+        CircuitBreaker cb = circuitBreakers.get(provider.getName());
+        if (!cb.tryAcquirePermission()) {
+            ProviderHealthTracker.getInstance().recordFailure(provider.getName(), "Circuit breaker is OPEN");
+            throw new ProviderException(provider.getName(), 503, "Circuit breaker is OPEN");
+        }
+        long start = System.nanoTime();
+        try {
+            T data = call.execute(provider);
+            cb.onSuccess(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            ProviderHealthTracker.getInstance().recordSuccess(provider.getName());
+            return data;
+        } catch (Exception e) {
+            if (e instanceof ProviderException pe && pe.getStatusCode() == 404) {
+                cb.onSuccess(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            } else {
+                cb.onError(System.nanoTime() - start, TimeUnit.NANOSECONDS, e);
+            }
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            ProviderHealthTracker.getInstance().recordFailure(provider.getName(), e);
+            log.warn("US provider {} failed: {}", provider.getName(), e.getMessage());
+            throw e;
+        }
+    }
+
+    private <T> ProviderResult<T> fetchUsSupplement(String operation,
+            java.util.function.Predicate<StockQuoteProvider> supported, ProviderCall<T> call) {
+        requireUsMarket();
+        long start = System.currentTimeMillis();
+        ProviderException failure = new ProviderException("US", 503, "No enabled provider for " + operation);
+        for (StockQuoteProvider provider : providers) {
+            if (!provider.isEnabled() || !supported.test(provider)) continue;
+            try {
+                return ProviderResult.of(callUsProvider(provider, call), provider.getName(),
+                        System.currentTimeMillis() - start);
+            } catch (Exception e) {
+                failure = e instanceof ProviderException pe ? pe
+                        : new ProviderException(provider.getName(), "Unable to fetch " + operation, e);
+                if (Thread.currentThread().isInterrupted()) break;
+            }
+        }
+        throw failure;
+    }
+
+    private ProviderResult<Map<String, Quote>> fetchUsQuotes(List<String> symbols) {
+        long start = System.currentTimeMillis();
+        if (symbols == null || symbols.isEmpty()) {
+            throw new IllegalArgumentException("At least one US symbol is required.");
+        }
+        List<String> normalized = symbols.stream().map(market::normalize).distinct().toList();
+        Map<String, Quote> data = new LinkedHashMap<>();
+        Map<String, ProviderResult<Quote>> items = new LinkedHashMap<>();
+        for (String symbol : normalized) {
+            Quote cached = cacheManager.getIntradayQuote(market, symbol);
+            ProviderResult<Quote> item;
+            if (cached != null) {
+                item = cachedUsResult(cached, false);
+            } else {
+                try {
+                    item = batchQuoteCoalescer.coalesce(market, symbol, () -> {
+                        Quote current = cacheManager.getIntradayQuote(market, symbol);
+                        return current == null ? fetchUsQuote(symbol) : cachedUsResult(current, false);
+                    });
+                } catch (ProviderException e) {
+                    item = ProviderResult.<Quote>builder().error(e).build();
+                }
+            }
+            items.put(symbol, item);
+            if (item.getData() != null) data.put(symbol, item.getData());
+        }
+        return ProviderResult.<Map<String, Quote>>builder().data(data).items(items)
+                .providerName("US").executionTimeMs(System.currentTimeMillis() - start)
+                .fromCache(items.values().stream().allMatch(ProviderResult::isFromCache))
+                .stale(items.values().stream().anyMatch(ProviderResult::isStale)).build();
+    }
+
+    private ProviderResult<Quote> fetchUsQuote(String symbol) {
+        ProviderException failure = new ProviderException("US", 503, "No enabled US quote provider.");
+        boolean allNotFound = true;
+        boolean attempted = false;
+        for (StockQuoteProvider provider : providers) {
+            if (!provider.isEnabled()) continue;
+            attempted = true;
+            try {
+                Optional<Quote> fetched = callUsProvider(provider, p -> p.fetchQuote(symbol));
+                if (fetched.isPresent()) {
+                    Quote quote = fetched.get();
+                    if (quote.getMetadata() == null) {
+                        quote.setMetadata(QuoteMetadata.builder().market(market.name())
+                                .provider(provider.getName()).feed("UNSPECIFIED").mode("UNSPECIFIED").build());
+                    }
+                    cacheManager.putIntradayQuote(market, symbol, quote);
+                    return ProviderResult.of(quote.toBuilder().build(), provider.getName(), 0);
+                }
+                failure = new ProviderException(provider.getName(), 404, "US stock not found: " + symbol);
+            } catch (Exception e) {
+                ProviderException current = e instanceof ProviderException pe ? pe
+                        : new ProviderException(provider.getName(), "US quote request failed", e);
+                if (current.getStatusCode() != 404) {
+                    allNotFound = false;
+                    failure = current;
+                } else if (allNotFound) {
+                    failure = current;
+                }
+                if (Thread.currentThread().isInterrupted()) break;
+            }
+        }
+        // A confirmed missing instrument must not be resurrected from an old quote.
+        if (!attempted || !allNotFound) {
+            Quote stale = cacheManager.getStaleQuote(market, symbol);
+            if (stale != null) return cachedUsResult(stale, true);
+            failure = new ProviderException("US", 503, "US quote providers unavailable for " + symbol);
+        }
+        return ProviderResult.<Quote>builder().error(failure).build();
+    }
+
+    private ProviderResult<Quote> cachedUsResult(Quote cached, boolean stale) {
+        Quote copy = cached.toBuilder().build();
+        if (copy.getMetadata() != null) {
+            copy.setMetadata(copy.getMetadata().toBuilder().fromCache(true).stale(stale).build());
+        }
+        return ProviderResult.fromCache(copy,
+                copy.getMetadata() == null ? "CACHE" : copy.getMetadata().getProvider(), stale, 0);
     }
 }
