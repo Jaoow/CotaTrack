@@ -68,6 +68,7 @@ public class ProviderConfiguration {
     }
 
     @Bean
+    @org.springframework.context.annotation.Primary
     public ProviderOrchestrator providerOrchestrator(CotaTrackCacheManager cacheManager) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))

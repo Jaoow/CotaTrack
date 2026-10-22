@@ -47,16 +47,7 @@ public class StockQueryControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/quote/PETR4?dividends=true should include dividends in response")
-    void testStockQuoteWithDividendsParam() throws Exception {
-        mockMvc.perform(get("/api/quote/PETR4").param("dividends", "true"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.results[0].dividends", notNullValue()))
-                .andExpect(jsonPath("$.results[0].dividends.cashDividends", notNullValue()));
-    }
-
-    @Test
-    @DisplayName("GET /api/quote/PETR4?includeDividends=true should also include dividends in response")
+    @DisplayName("GET /api/quote/PETR4?includeDividends=true should include dividends in response")
     void testStockQuoteWithIncludeDividendsParam() throws Exception {
         mockMvc.perform(get("/api/quote/PETR4").param("includeDividends", "true"))
                 .andExpect(status().isOk())

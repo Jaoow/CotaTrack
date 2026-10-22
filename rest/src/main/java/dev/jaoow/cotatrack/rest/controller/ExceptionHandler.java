@@ -1,18 +1,40 @@
 package dev.jaoow.cotatrack.rest.controller;
 
+import dev.jaoow.cotatrack.api.provider.ProviderException;
 import dev.jaoow.cotatrack.rest.exception.BadRequestException;
 import dev.jaoow.cotatrack.rest.exception.FailedFetchException;
 import dev.jaoow.cotatrack.rest.exception.NotFoundException;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
 @ControllerAdvice
 public class ExceptionHandler {
+
+    @Order(0)
+    @ControllerAdvice(assignableTypes = UsStocksController.class)
+    public static class StocksExceptionHandler {
+
+        @org.springframework.web.bind.annotation.ExceptionHandler(ProviderException.class)
+        public ResponseEntity<ErrorResponse> providerFailure(ProviderException ex) {
+            log.warn("US market data request failed: {}", ex.getMessage());
+            HttpStatus status = ex.getStatusCode() == 404 ? HttpStatus.NOT_FOUND : HttpStatus.SERVICE_UNAVAILABLE;
+            return new ResponseEntity<>(new ErrorResponse(true,
+                    status == HttpStatus.NOT_FOUND ? "US stock not found." : "US market data provider unavailable."), status);
+        }
+
+        @org.springframework.web.bind.annotation.ExceptionHandler(MethodArgumentTypeMismatchException.class)
+        public ResponseEntity<ErrorResponse> invalidParameter() {
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse(true, "Invalid STOCKS request parameter."));
+        }
+    }
 
     @org.springframework.web.bind.annotation.ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFoundException(NotFoundException ex) {

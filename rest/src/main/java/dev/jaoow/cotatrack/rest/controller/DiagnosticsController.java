@@ -1,6 +1,7 @@
 package dev.jaoow.cotatrack.rest.controller;
 
 import dev.jaoow.cotatrack.api.cache.CotaTrackCacheManager;
+import dev.jaoow.cotatrack.api.classification.AssetMarket;
 import dev.jaoow.cotatrack.api.provider.StockQuoteProvider;
 import dev.jaoow.cotatrack.api.provider.forex.BcbPtaxFxProvider;
 import dev.jaoow.cotatrack.api.provider.forex.YahooFxProvider;
@@ -10,6 +11,8 @@ import dev.jaoow.cotatrack.rest.dto.DiagnosticsResponse;
 import dev.jaoow.cotatrack.rest.dto.DiagnosticsResponse.ProviderHealthDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,17 +32,28 @@ public class DiagnosticsController {
 
     private final ProviderOrchestrator providerOrchestrator;
     private final CotaTrackCacheManager cacheManager;
+    private ProviderOrchestrator usOrchestrator;
+
+    @Autowired
+    public void setUsOrchestrator(@Qualifier("usProviderOrchestrator") ProviderOrchestrator orchestrator) {
+        this.usOrchestrator = orchestrator;
+    }
 
     @GetMapping({"/health", "/diagnostics"})
     public DiagnosticsResponse getDiagnostics() {
         ProviderHealthTracker tracker = ProviderHealthTracker.getInstance();
-        Map<String, CircuitBreaker> cbs = providerOrchestrator.getCircuitBreakers();
+        Map<String, CircuitBreaker> cbs = new HashMap<>(providerOrchestrator.getCircuitBreakers());
+        List<StockQuoteProvider> stockProviders = new ArrayList<>(providerOrchestrator.getProviders());
+        if (usOrchestrator != null) {
+            cbs.putAll(usOrchestrator.getCircuitBreakers());
+            stockProviders.addAll(usOrchestrator.getProviders());
+        }
 
         List<ProviderHealthDto> providerDtos = new ArrayList<>();
         boolean anyHealthy = false;
 
         // 1. Stock Market Providers
-        for (StockQuoteProvider provider : providerOrchestrator.getProviders()) {
+        for (StockQuoteProvider provider : stockProviders) {
             String name = provider.getName();
             ProviderHealthTracker.ProviderMetrics m = tracker.getOrCreate(name);
 
@@ -62,6 +76,7 @@ public class DiagnosticsController {
 
             providerDtos.add(ProviderHealthDto.builder()
                     .name(name)
+                    .market(provider.getMarket() == AssetMarket.US ? "US" : null)
                     .status(status)
                     .enabled(provider.isEnabled())
                     .circuitBreakerState(cbState)
@@ -106,6 +121,16 @@ public class DiagnosticsController {
         cacheStats.put("logos", cacheManager.getLogoCache().estimatedSize());
         cacheStats.put("forexQuotes", cacheManager.getFxQuoteCache().estimatedSize());
         cacheStats.put("staleDisasterQuotes", cacheManager.getStaleQuoteCache().estimatedSize());
+        cacheStats.put("usStockCatalogs", cacheManager.getStockCatalogCache().estimatedSize());
+        cacheStats.put("usStockFundamentals", cacheManager.getStockFundamentalsCache().estimatedSize());
+        cacheStats.put("usIntradayQuotes", cacheManager.getIntradayQuoteCache().asMap().keySet()
+                .stream().filter(key -> key.startsWith("US:")).count());
+        cacheStats.put("usHistoricalQuotes", cacheManager.getHistoricalCache().asMap().keySet()
+                .stream().filter(key -> key.startsWith("US:")).count());
+        cacheStats.put("usDividends", cacheManager.getDividendsCache().asMap().keySet()
+                .stream().filter(key -> key.startsWith("US:")).count());
+        cacheStats.put("usStaleQuotes", cacheManager.getStaleQuoteCache().asMap().keySet()
+                .stream().filter(key -> key.startsWith("US:")).count());
 
         String overallStatus = anyHealthy ? "UP" : "DEGRADED";
 

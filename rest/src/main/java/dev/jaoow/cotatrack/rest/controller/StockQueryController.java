@@ -28,10 +28,9 @@ public class StockQueryController {
             @RequestParam(required = false) LocalDate to,
             @RequestParam(required = false) String interval,
             @RequestParam(required = false) String range,
-            @RequestParam(required = false) Boolean dividends,
             @RequestParam(required = false) Boolean includeDividends
     ) {
-        boolean withDividends = Boolean.TRUE.equals(dividends) || Boolean.TRUE.equals(includeDividends);
+        boolean withDividends = Boolean.TRUE.equals(includeDividends);
         return stockQueryService.fetchStockQuotes(symbols, from, to, interval, range, withDividends);
     }
 

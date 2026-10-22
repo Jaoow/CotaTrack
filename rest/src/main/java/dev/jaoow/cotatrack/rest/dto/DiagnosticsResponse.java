@@ -27,6 +27,7 @@ public class DiagnosticsResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ProviderHealthDto {
         private String name;
+        private String market;
         private String status;
         private boolean enabled;
         private String circuitBreakerState;
