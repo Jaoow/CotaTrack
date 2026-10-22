@@ -227,6 +227,31 @@ GET /api/diagnostics
 
 ## 📚 Documentação de Fontes, Cache e Dados
 
+### Ações americanas (STOCKS)
+
+O suporte US usa Twelve Data em uma cadeia independente da B3. Os endpoints existentes não mudam.
+Por padrão a integração está desabilitada; habilite-a somente com uma chave e direitos de uso adequados:
+
+```powershell
+$env:COTATRACK_STOCKS_ENABLED = "true"
+$env:TWELVE_DATA_API_KEY = "<sua-chave>"
+```
+
+```http
+GET /api/stocks/AAPL,MSFT
+GET /api/stocks/BRK.B?range=1y&interval=1d
+GET /api/stocks/AAPL?includeDividends=true
+GET /api/stocks/list?search=apple&sortBy=name&limit=20&page=0
+```
+
+As respostas incluem `metadata` por símbolo (feed, origem, cache, `stale`) e `errors` para falhas parciais.
+O feed intraday padrão **não é consolidado**. Fundamentos e eventos corporativos dependem do plano;
+o limite Basic de 8 créditos/minuto não comporta endpoints com peso maior sem ajuste do plano e da configuração.
+A distribuição externa por API exige direitos específicos do fornecedor.
+
+Veja [STOCKS: contratos, configuração, cobertura e testes](docs/STOCKS.md) e os exemplos em
+[Bruno US Stocks](bruno/cotatrack/05%20US%20Stocks).
+
 Para detalhes completos sobre a arquitetura multi-provedor (TradingView, Yahoo Chart, brapi.dev), a estratégia multi-camada de cache (TTLs configuráveis para cotações intraday 5m, histórico 12h, proventos 24h, logos 7d e stale 24h), coalescência Single-Flight para prevenção de *thundering herd*, fórmulas de campos derivados (SMA200, médias de volume, faixas de preço) e regras de nulabilidade/serialização, consulte:
 - [Documentação de Fontes de Dados e Catálogo do Modelo Quote](docs/DATA_SOURCES.md)
 

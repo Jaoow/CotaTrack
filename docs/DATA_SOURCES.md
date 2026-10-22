@@ -312,6 +312,11 @@ Se um símbolo não suportado for enviado (ex: `BTC`, `CNY`, `XYZ`), a API rejei
 
 ## 7. Observabilidade, Saúde e Diagnóstico (Fase 6)
 
+> STOCKS usa uma cadeia US independente com Twelve Data. A matriz B3 e seus fallbacks
+> descritos acima não se aplicam a `/api/stocks/**`.
+> Veja [STOCKS: cobertura, contratos e configuração](STOCKS.md) para a integração implementada,
+> os campos equivalentes, limites por plano, feed parcial e direitos de redistribuição.
+
 A API disponibiliza endpoints de diagnóstico e saúde em `/api/health` e `/api/diagnostics` gerenciados pelo [`DiagnosticsController`](file:///home/jaoow/IdeaProjects/CotaTrack/rest/src/main/java/dev/jaoow/cotatrack/rest/controller/DiagnosticsController.java) e monitorados em tempo de execução pelo [`ProviderHealthTracker`](file:///home/jaoow/IdeaProjects/CotaTrack/api/src/main/java/dev/jaoow/cotatrack/api/provider/health/ProviderHealthTracker.java):
 
 ### 7.1 Métricas Rastreadas por Provedor
@@ -330,6 +335,5 @@ Exposição em tempo real do tamanho estimado de todas as tabelas de cache Caffe
 - `logos` (TTL 7d)
 - `forexQuotes` (TTL 5m)
 - `staleDisasterQuotes` (TTL 24h)
-
 
 
