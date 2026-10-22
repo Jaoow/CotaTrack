@@ -1,0 +1,20 @@
+meta {
+  name: Reject unsupported global volume sort
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/stocks/list?sortBy=volume
+  body: none
+  auth: none
+}
+
+params:query {
+  sortBy: volume
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq true
+}

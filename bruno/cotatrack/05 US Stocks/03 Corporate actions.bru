@@ -1,0 +1,21 @@
+meta {
+  name: US dividends and splits (paid entitlement)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/stocks/AAPL?includeDividends=true
+  body: none
+  auth: none
+}
+
+params:query {
+  includeDividends: true
+}
+
+assert {
+  res.status: eq 200
+  res.body.results[0].dividends.cashDividends: isArray
+  res.body.results[0].dividends.stockDividends: isArray
+}

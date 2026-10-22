@@ -1,0 +1,19 @@
+meta {
+  name: US current quotes
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/stocks/AAPL,MSFT
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.metadata.AAPL.market: eq US
+  res.body.metadata.AAPL.feed: eq TWELVE_DATA_US_DEFAULT
+  res.body.errors: isArray
+}

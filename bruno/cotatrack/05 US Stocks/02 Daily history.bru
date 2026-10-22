@@ -1,0 +1,22 @@
+meta {
+  name: US daily history
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/stocks/AAPL?range=1y&interval=1d
+  body: none
+  auth: none
+}
+
+params:query {
+  range: 1y
+  interval: 1d
+}
+
+assert {
+  res.status: eq 200
+  res.body.results[0].historicalQuotes: isArray
+  res.body.metadata.AAPL.historicalFeed: eq TWELVE_DATA_US_HISTORY_RAW
+}

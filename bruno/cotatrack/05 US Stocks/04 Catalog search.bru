@@ -1,0 +1,25 @@
+meta {
+  name: US catalog search and pagination
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/stocks/list?search=apple&sortBy=name&limit=5&page=0
+  body: none
+  auth: none
+}
+
+params:query {
+  search: apple
+  sortBy: name
+  limit: 5
+  page: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.results: isArray
+  res.body.currentPage: eq 1
+  res.body.errors: isArray
+}
